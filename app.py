@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from src.data_loader import load_psak117_data
 from src.calculator import calculate_bel, calculate_ra_csm, generate_movement
-from src.utils import format_idr
+from src.utils import format_idr, format_date_columns
 
 # 1. Konfigurasi Halaman Streamlit
 st.set_page_config(
@@ -19,8 +19,7 @@ st.sidebar.header("Unduh & Unggah Data")
 uploaded_file = st.sidebar.file_uploader("Unggah File Sampel Perhitungan (.xlsx / .xlsm)", type=["xlsx", "xlsm"])
 
 if uploaded_file is not None:
-    # Menggunakan modul pemotongan vertikal dari data_loader.py
-    with st.spinner("Memotong dan memisahkan sheet secara vertikal..."):
+    with st.spinner("Memotong dan memisahkan sheet secara vertikal & blok..."):
         data_bundle = load_psak117_data(uploaded_file)
         
     if not data_bundle["status"]:
@@ -28,54 +27,65 @@ if uploaded_file is not None:
     else:
         st.success(data_bundle["message"])
         
-        # Ekstrak seluruh tabel yang telah dipisah bersih oleh data_loader
         df_header = data_bundle["header"]
         df_gmm = data_bundle["template_gmm"]
         df_detail = data_bundle["detail"]
-        df_asumsi = data_bundle["asumsi"]
         
-        # Navigasi Tab Utama User Interface
         tab_input, tab_bel, tab_ra_csm, tab_movement = st.tabs([
-            "📁 Data Input (Terpisah)", 
+            "📁 Data Input", 
             "📈 Hasil Kalkulasi BEL", 
             "🛡️ Saldo RA & CSM", 
             "🔄 Liability Movement"
         ])
         
-        # --- TAB INPUT: MENAMPILKAN TABEL YANG SUDAH DIPISAH ---
         with tab_input:
             st.subheader("1. Data Input - Header (Bagian Atas)")
-            st.caption(f"Terstatus Bersih: Terdeteksi {df_header.shape[0]} baris data dan {df_header.shape[1]} kolom.")
             st.dataframe(df_header, use_container_width=True)
+            # st.markdown("---")
             
-            st.markdown("---")
-            
-            col_gmm, col_asumsi = st.columns([2, 1])
-            with col_gmm:
-                st.subheader("2. Template GMM (Bagian Bawah)")
-                if not df_gmm.empty:
-                    st.caption(f"Terstatus Bersih: Terdeteksi {df_gmm.shape[0]} baris data dan {df_gmm.shape[1]} kolom.")
-                    st.dataframe(df_gmm, use_container_width=True)
-                else:
-                    st.warning("Penanda 'TEMPLATE GMM' tidak ditemukan di dalam sheet.")
-                    
-            with col_asumsi:
-                st.subheader("3. Asumsi Suku Bunga")
-                st.dataframe(df_asumsi, use_container_width=True)
+            # col_gmm, col_asumsi = st.columns([1.5, 1])
+            # with col_gmm:
+            st.subheader("2. Template GMM (Bagian Bawah)")
+            st.dataframe(df_gmm, use_container_width=True)
+            # st.markdown("---")
+
+            st.subheader("3. Data Input - Detail")
+            st.dataframe(df_detail, use_container_width=True)       
                 
-        # --- LOGIKA ENGINE KALKULATOR AKTUARTA (src/calculator.py) ---
-        # Sesuai arahan Anda, perhitungan menggunakan data dari tabel TEMPLATE GMM (df_gmm)
-        # dan dikalibrasi dalam mata uang IDR
-        df_bel_result = calculate_bel(df_gmm, df_asumsi) 
+            # with col_asumsi:
+            st.subheader("4. Asumsi Aktuaria")
+                
+            # Memecah tampilan menjadi beberapa kotak drop-down
+            with st.expander("Tabel Mortalita (TMI)", expanded=True):
+                st.dataframe(data_bundle["asumsi_tmi"], use_container_width=True)
+                    
+            with st.expander("Rate IBPA"):
+                st.dataframe(data_bundle["asumsi_ibpa"], use_container_width=True)
+
+            with st.expander("Rate Inflasi"):
+                df_inflasi_clean = format_date_columns(data_bundle["asumsi_inflasi"].copy())
+                st.dataframe(df_inflasi_clean, use_container_width=True)
+                    
+            with st.expander("Lapse Rate - Monthly"):
+                st.dataframe(data_bundle["asumsi_lapse_m"], use_container_width=True)
+
+            with st.expander("Lapse Rate - Yearly"):
+                st.dataframe(data_bundle["asumsi_lapse_y"], use_container_width=True)
+
+            with st.expander("Lapse Rate - Monthly 2"):
+                st.dataframe(data_bundle["asumsi_lapse_m2"], use_container_width=True)        
+                
+        # Hitung menggunakan tabel Rate IBPA spesifik
+        df_bel_result = calculate_bel(df_gmm, data_bundle["asumsi_ibpa"]) 
         total_bel_val = df_bel_result["PV_Net_Cash_Flow"].sum()
         
-        summary_metrics = calculate_ra_csm(df_header, total_bel_val, df_asumsi)
+        summary_metrics = calculate_ra_csm(df_header, total_bel_val, data_bundle["asumsi_ibpa"])
         df_movement_result = generate_movement(
             summary_metrics["Total_CSM"], 
             summary_metrics["Total_RA"], 
             summary_metrics["Total_BEL"]
         )
-        
+                
         # --- TAB BEL ---
         with tab_bel:
             st.subheader("Perhitungan Proyeksi Best Estimate Liability (BEL) - Mata Uang IDR")
