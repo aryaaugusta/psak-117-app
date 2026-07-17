@@ -135,3 +135,33 @@ def generate_movement(initial_csm, initial_ra, initial_bel):
         df_move.loc[5, col] = opening + changes
         
     return df_move
+
+def generate_cashflow_projection(duration_years, premium, komisi, biaya_akuisisi, pad_percent, fixed_cost_base):
+    """
+    Menghasilkan tabel proyeksi arus kas bulanan.
+    """
+    data = []
+    total_months = duration_years * 12
+    
+    # Inisialisasi faktor pertumbuhan untuk 'Fixed Cost_1'
+    growth_factor = 1.002 # Contoh pertumbuhan bulanan
+    
+    for month in range(1, total_months + 1):
+        tahun = (month - 1) // 12 + 1
+        
+        # Premi & Biaya hanya muncul di bulan ke-1 (Tahun 1, Bulan 1)
+        is_first_month = (month == 1)
+        
+        row = {
+            "Tahun Polis": tahun,
+            "Bulan ke-": month,
+            "Premi": premium if is_first_month else 0,
+            "Komisi": komisi if is_first_month else 0,
+            "Biaya Akuisisi": biaya_akuisisi if is_first_month else 0,
+            "% Premi (PAD)": (premium * pad_percent) if is_first_month else 0,
+            "Fixed Cost": fixed_cost_base,
+            "Fixed Cost_1": fixed_cost_base * (growth_factor ** (month - 1))
+        }
+        data.append(row)
+    
+    return pd.DataFrame(data)

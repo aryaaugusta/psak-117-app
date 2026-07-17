@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from src.data_loader import load_psak117_data
-from src.calculator import calculate_bel, calculate_ra_csm, generate_movement
+from src.calculator import calculate_bel, calculate_ra_csm, generate_movement, generate_cashflow_projection
 from src.utils import format_idr, format_date_columns
 
 # 1. Konfigurasi Halaman Streamlit
@@ -91,6 +91,22 @@ if uploaded_file is not None:
             st.subheader("Perhitungan Proyeksi Best Estimate Liability (BEL) - Mata Uang IDR")
             st.metric("Total BEL Terdiskonto (Global)", format_idr(total_bel_val))
             st.dataframe(df_bel_result, use_container_width=True)
+
+            st.subheader("📋 Proyeksi Arus Kas Bulanan (Cash Flow)")
+
+            # Contoh parameter (bisa diambil dari df_header nantinya)
+            df_proyeksi = generate_cashflow_projection(
+                duration_years=3, 
+                premium=df_gmm["Premi"].iloc[0], 
+                komisi=df_detail["Komisi"].iloc[0], 
+                biaya_akuisisi=df_detail["Biaya_Akuisisi"].iloc[0], 
+                pad_percent=0.075, # 27.600 / 368.000 = 0.075
+                fixed_cost_base=1.000
+            )
+
+            # Menampilkan tabel
+            df_proyeksi.index += 1
+            st.dataframe(df_proyeksi, use_container_width=True)
             
         # --- TAB RA & CSM ---
         with tab_ra_csm:
