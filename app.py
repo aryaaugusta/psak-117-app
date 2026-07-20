@@ -1,5 +1,4 @@
 import streamlit as st
-import pandas as pd
 from src.data_loader import load_psak117_data
 from src.calculator import calculate_bel, calculate_ra_csm, generate_movement, generate_cashflow_projection, generate_cashflow_projection2
 from src.utils import format_idr, format_date_columns

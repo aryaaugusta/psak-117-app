@@ -1,5 +1,4 @@
 import pandas as pd
-import numpy as np
 
 def find_correct_header_row(file_path, sheet_name, target_keyword):
     try:
