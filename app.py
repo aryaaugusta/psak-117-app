@@ -18,8 +18,9 @@ st.caption("Aplikasi Perhitungan Best Estimate Liability, Risk Adjustment, dan C
 st.sidebar.header("Unduh & Unggah Data")
 uploaded_file = st.sidebar.file_uploader("Unggah File Sampel Perhitungan (.xlsx / .xlsm)", type=["xlsx", "xlsm"])
 
-st.sidebar.subheader("Parameter Input Kalkulasi")
+st.sidebar.subheader("Parameter Inflasi & PAD")
 pad_expense_input = st.sidebar.number_input("PAD Expense (%)", min_value=0.0, max_value=100.0, value=0.0) / 100
+monthly_inflation_input = st.sidebar.number_input("Inflasi Bulanan (%)", value=0.2) / 100 # Default 0.2% sesuai contoh 1.002
 
 if uploaded_file is not None:
     with st.spinner("Memotong dan memisahkan sheet secara vertikal & blok..."):
@@ -109,8 +110,11 @@ if uploaded_file is not None:
             #     df_detail=df_detail
             # )
             df_proyeksi = generate_cashflow_projection2(
+                df_header=df_header,
                 df_detail=df_detail, 
-                pad_expense=pad_expense_input
+                pad_expense=pad_expense_input,
+                monthly_inflation=monthly_inflation_input,
+                asumsi_inflasi=data_bundle["asumsi_inflasi"]
             )
 
             # Menampilkan tabel

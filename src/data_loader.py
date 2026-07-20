@@ -187,6 +187,8 @@ def load_psak117_data(uploaded_file):
             asumsi_inflasi.dropna(how='all', inplace=True)
             asumsi_inflasi.reset_index(drop=True, inplace=True) #
             asumsi_inflasi.index += 1  # Indeks mulai dari 1
+            # Konversi kolom kunci menjadi format yang sama dengan Tanggal_Mulai_Polis
+            # asumsi_inflasi.iloc[:, 0] = pd.to_datetime(asumsi_inflasi.iloc[:, 0], errors='coerce')
         except:
             asumsi_inflasi = pd.DataFrame()
 
