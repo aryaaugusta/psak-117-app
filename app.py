@@ -19,7 +19,7 @@ uploaded_file = st.sidebar.file_uploader("Unggah File Sampel Perhitungan (.xlsx 
 
 st.sidebar.subheader("Parameter Inflasi & PAD")
 pad_expense_input = st.sidebar.number_input("PAD Expense (%)", min_value=0.0, max_value=100.0, value=0.0) / 100
-monthly_inflation_input = st.sidebar.number_input("Inflasi Bulanan (%)", value=0.2) / 100 # Default 0.2% sesuai contoh 1.002
+monthly_inflation_input = st.sidebar.number_input("Inflasi Bulanan (%)", value=0.21) / 100 # Default 0.2% sesuai contoh 1.002
 
 if uploaded_file is not None:
     with st.spinner("Memotong dan memisahkan sheet secara vertikal & blok..."):
