@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from src.data_loader import load_psak117_data
-from src.calculator import calculate_bel, calculate_ra_csm, generate_movement, generate_cashflow_projection
+from src.calculator import calculate_bel, calculate_ra_csm, generate_movement, generate_cashflow_projection, generate_cashflow_projection2
 from src.utils import format_idr, format_date_columns
 
 # 1. Konfigurasi Halaman Streamlit
@@ -17,6 +17,9 @@ st.caption("Aplikasi Perhitungan Best Estimate Liability, Risk Adjustment, dan C
 # 2. Sidebar untuk Unggah Berkas
 st.sidebar.header("Unduh & Unggah Data")
 uploaded_file = st.sidebar.file_uploader("Unggah File Sampel Perhitungan (.xlsx / .xlsm)", type=["xlsx", "xlsm"])
+
+st.sidebar.subheader("Parameter Input Kalkulasi")
+pad_expense_input = st.sidebar.number_input("PAD Expense (%)", min_value=0.0, max_value=100.0, value=0.0) / 100
 
 if uploaded_file is not None:
     with st.spinner("Memotong dan memisahkan sheet secara vertikal & blok..."):
@@ -95,13 +98,19 @@ if uploaded_file is not None:
             st.subheader("📋 Proyeksi Arus Kas Bulanan (Cash Flow)")
 
             # Contoh parameter (bisa diambil dari df_header nantinya)
-            df_proyeksi = generate_cashflow_projection(
-                duration_years=3, 
-                premium=df_gmm["Premi"].iloc[0], 
-                komisi=df_detail["Komisi"].iloc[0], 
-                biaya_akuisisi=df_detail["Biaya_Akuisisi"].iloc[0], 
-                pad_percent=0.075, # 27.600 / 368.000 = 0.075
-                fixed_cost_base=1.000
+            # df_proyeksi = generate_cashflow_projection(
+            #     duration_years=3, 
+            #     premium=df_gmm["Premi"].iloc[0], 
+            #     komisi=df_detail["Komisi"].iloc[0], 
+            #     biaya_akuisisi=df_detail["Biaya_Akuisisi"].iloc[0], 
+            #     # pad_percent=0.075, # 27.600 / 368.000 = 0.075
+            #     pad_expense=pad_expense_input,
+            #     fixed_cost_base=pad_expense_input,
+            #     df_detail=df_detail
+            # )
+            df_proyeksi = generate_cashflow_projection2(
+                df_detail=df_detail, 
+                pad_expense=pad_expense_input
             )
 
             # Menampilkan tabel

@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 
 def calculate_bel(df_detail, df_asumsi_ibpa):
     """
@@ -136,7 +137,7 @@ def generate_movement(initial_csm, initial_ra, initial_bel):
         
     return df_move
 
-def generate_cashflow_projection(duration_years, premium, komisi, biaya_akuisisi, pad_percent, fixed_cost_base):
+def generate_cashflow_projection(duration_years, premium, komisi, biaya_akuisisi, pad_expense, fixed_cost_base, df_detail):
     """
     Menghasilkan tabel proyeksi arus kas bulanan.
     """
@@ -145,6 +146,19 @@ def generate_cashflow_projection(duration_years, premium, komisi, biaya_akuisisi
     
     # Inisialisasi faktor pertumbuhan untuk 'Fixed Cost_1'
     growth_factor = 1.002 # Contoh pertumbuhan bulanan
+
+    # Mengambil nilai PCT_Premi dari sheet Detail
+    pct_premi = df_detail['Biaya_Pemeliharaan_Polis_PCT_Premi'].iloc[0]
+
+    # Mengambil nilai Fixed Cost dari sheet Detail
+    fixed_cost = df_detail['Biaya_Pemeliharaan_Polis_Fixed_Cost'].iloc[0]
+
+    # Rumus Excel: Biaya_Pemeliharaan_Polis_PCT_Premi * (1 + PAD Expense)
+    pad_value = pct_premi * (1 + pad_expense)
+
+    # Rumus Excel: Biaya_Pemeliharaan_Polis_Fixed_Cost * (1 + PAD Expense)
+    fixed_cost_value = fixed_cost * (1 + fixed_cost_base)
+    print(f"FIXED COST VALUE: {fixed_cost_value} | FIXED COST BASE: {fixed_cost_base} | FIXED COST: {fixed_cost}")
     
     for month in range(1, total_months + 1):
         tahun = (month - 1) // 12 + 1
@@ -158,10 +172,72 @@ def generate_cashflow_projection(duration_years, premium, komisi, biaya_akuisisi
             "Premi": premium if is_first_month else 0,
             "Komisi": komisi if is_first_month else 0,
             "Biaya Akuisisi": biaya_akuisisi if is_first_month else 0,
-            "% Premi (PAD)": (premium * pad_percent) if is_first_month else 0,
-            "Fixed Cost": fixed_cost_base,
+            "% Premi (PAD)": pad_value if is_first_month else 0,
+            "Fixed Cost": fixed_cost_value if is_first_month else 0,
             "Fixed Cost_1": fixed_cost_base * (growth_factor ** (month - 1))
         }
         data.append(row)
     
     return pd.DataFrame(data)
+
+import pandas as pd
+
+def generate_cashflow_projection2(df_detail, pad_expense=0.0):
+    """
+    Melakukan looping pada setiap baris di df_detail dan menghasilkan proyeksi
+    untuk seluruh polis yang ada di dalam sheet.
+    """
+    all_projections = []
+
+    # Mengambil nilai PCT_Premi dari sheet Detail
+    pct_premi = df_detail['Biaya_Pemeliharaan_Polis_PCT_Premi'].iloc[0]
+
+    # Mengambil nilai Fixed Cost dari sheet Detail
+    fixed_cost = df_detail['Biaya_Pemeliharaan_Polis_Fixed_Cost'].iloc[0]
+
+    # Rumus Excel: Biaya_Pemeliharaan_Polis_PCT_Premi * (1 + PAD Expense)
+    pad_value = pct_premi * (1 + pad_expense)
+
+    # Rumus Excel: Biaya_Pemeliharaan_Polis_Fixed_Cost * (1 + PAD Expense)
+    fixed_cost_value = fixed_cost * (1 + pad_expense)
+
+    # print(f"FIXED COST VALUE: {fixed_cost_value} | FIXED COST: {fixed_cost}")
+    # print(f"DATA FRAME DETAIL: {df_detail}")
+    
+    # Looping setiap baris di df_detail
+    for index, row in df_detail.iterrows():
+        # Mengambil parameter dari setiap baris
+        premium = row.get('Premi', 0)
+        komisi = row.get('Komisi', 0)
+        akuisisi = row.get('Biaya_Akuisisi', 0)
+        pct_premi = row.get('Biaya_Pemeliharaan_Polis_PCT_Premi', 0)
+        fixed_cost_base = row.get('Fixed_Cost', 1.0) # Mengambil nilai dari kolom Fixed Cost di sheet Detail
+        duration = row.get('Duration_Years', 3) # Asumsi ada kolom durasi
+        
+        # Perhitungan PAD Expense
+        pad_value = pct_premi * (1 + pad_expense)
+
+        # print(f"PAD VALUE: {pad_value}")
+
+        # Buat array bulan dari 1 sampai durasi
+        total_months = duration * 12
+        months = np.arange(1, total_months + 1)
+        
+        # print(f"Polis_ID: {row.get('Polis_ID', index)} | Tahun: {tahun} | Bulan: {month}")
+            
+        projection = pd.DataFrame({
+            # "Polis_ID": row.get('Polis_ID', index), # Identitas unik
+            "Tahun Polis": ((months - 1) // 12) + 1,
+            "Bulan ke-": months,
+            "Premi": [premium if m == 1 else 0 for m in months],
+            "Komisi": komisi if is_first_month else 0,
+            "Biaya Akuisisi": akuisisi if is_first_month else 0,
+            "% Premi (PAD)": pad_value if is_first_month else 0,
+            "Fixed Cost":  fixed_cost_value if is_first_month else 0, 
+            "Fixed Cost (Dihitung CARE)": 1.000 * (1.002 ** (month - 1))
+        })
+        all_projections.append(projection)
+
+        print(f"ALL PROJECTIONS: {all_projections}")
+    
+    return pd.DataFrame(all_projections)
