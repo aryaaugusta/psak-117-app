@@ -205,10 +205,7 @@ def get_inflation_rate(tanggal_mulai, asumsi_inflasi):
         return match.iloc[0, 1] # Mengambil nilai rate
     return 0.0
 
-import pandas as pd
-import numpy as np
-
-def generate_cashflow_projection2(df_header, df_detail, pad_expense=0.0, monthly_inflation=0.0, asumsi_inflasi=None, df_tmi=None, pad_mortality=0.0):
+def generate_cashflow_projection2(df_header, df_detail, pad_expense=0.0, monthly_inflation=0.0, asumsi_inflasi=None, df_tmi=None, pad_mortality=0.0, total_nd_global=0.0):
     # 1. Gabungkan (Merge) df_detail dan df_header agar panjang barisnya konsisten
     # Pastikan ada kolom kunci yang sama, misal 'Policy_ID' atau 'A_PolicyNo'. 
     # Jika struktur baris sudah sejajar persis, bisa langsung di-assign.
@@ -243,7 +240,19 @@ def generate_cashflow_projection2(df_header, df_detail, pad_expense=0.0, monthly
             return match.iloc[0, 4] # Mengambil kolom ke-5 (index 4)
         return 0.0
 
+    def lookup_tmi_nd(usia):
+        if df_tmi is None:
+            return 0.0
+        match = df_tmi[df_tmi.iloc[:, 0] == usia]
+        if not match.empty:
+            # VLOOKUP kolom ke-7 berarti index 6
+            return match.iloc[0, 6] 
+        return 0.0
+
     df['Base_qx'] = df['Usia_Tertanggung'].apply(lookup_tmi)
+
+    # 2. Cari nilai qx untuk ND dari TMI
+    df['Base_qx_ND'] = df['Usia_Tertanggung'].apply(lookup_tmi_nd)
 
     # 5. Logika Monthly qx (Term Life)
     # Pastikan Pol_Term_M minimal bernilai 1
@@ -260,6 +269,11 @@ def generate_cashflow_projection2(df_header, df_detail, pad_expense=0.0, monthly
     
     df['Monthly_qx'] = np.where(kondisi, df['Base_qx'] * (1 + pad_mortality), 0.0)
 
+    is_nd_total_zero = (total_nd_global == 0)
+
+    df['Monthly_qx_ND'] = np.where(is_nd_total_zero, 0.0, np.where(kondisi, df['Base_qx_ND'] * (1 + pad_mortality), 0.0))
+        #np.where(0.0, 0.0, np.where(kondisi, df['Base_qx_ND'] * (1 + pad_mortality), 0.0))
+
     # 6. Susun DataFrame Hasil Proyeksi
     projection = pd.DataFrame({
         "Tahun Polis": df['A_Policy_Year'],
@@ -272,7 +286,8 @@ def generate_cashflow_projection2(df_header, df_detail, pad_expense=0.0, monthly
         "Fixed Cost (Dihitung CARE)": round(fixed_cost_value * ((1 + eff_monthly_inflation) ** bulan_ke)),
         "Yearly Rate CV": df['Yearly_Rate_Cash_Value'],
         "Monthly Rate CV": df['Monthly_Rate_Cash_Value'],
-        "Monthly qx (Term Life)": df['Monthly_qx']
+        "Monthly qx (Term Life)": df['Monthly_qx'],
+        "Monthly qx (ND)": df['Monthly_qx_ND']
     })
     
     return projection
