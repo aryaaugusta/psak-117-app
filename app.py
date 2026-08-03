@@ -18,6 +18,8 @@ st.sidebar.header("Unduh & Unggah Data")
 uploaded_file = st.sidebar.file_uploader("Unggah File Sampel Perhitungan (.xlsx / .xlsm)", type=["xlsx", "xlsm"])
 
 st.sidebar.subheader("Parameter Inflasi & PAD")
+pad_mortality_input = st.sidebar.number_input("PAD Mortality (%)", min_value=0.0, max_value=100.0, value=0.0) / 100
+pad_lapse_input = st.sidebar.number_input("PAD Lapse (%)", min_value=0.0, max_value=100.0, value=0.0) / 100
 pad_expense_input = st.sidebar.number_input("PAD Expense (%)", min_value=0.0, max_value=100.0, value=0.0) / 100
 monthly_inflation_input = st.sidebar.number_input("Inflasi Bulanan (%)", value=0.21) / 100 # Default 0.2% sesuai contoh 1.002
 
@@ -92,10 +94,11 @@ if uploaded_file is not None:
         # --- TAB BEL ---
         with tab_bel:
             st.subheader("Perhitungan Proyeksi Best Estimate Liability (BEL) - Mata Uang IDR")
-            st.metric("Total BEL Terdiskonto (Global)", format_idr(total_bel_val))
+            # st.metric("Total BEL Terdiskonto (Global)", format_idr(total_bel_val))
             st.dataframe(df_bel_result, use_container_width=True)
 
-            st.subheader("📋 Proyeksi Arus Kas Bulanan (Cash Flow)")
+            # st.subheader("📋 Proyeksi Arus Kas Bulanan (Cash Flow)")
+            st.markdown("---")
 
             # Contoh parameter (bisa diambil dari df_header nantinya)
             # df_proyeksi = generate_cashflow_projection(
@@ -113,7 +116,9 @@ if uploaded_file is not None:
                 df_detail=df_detail, 
                 pad_expense=pad_expense_input,
                 monthly_inflation=monthly_inflation_input,
-                asumsi_inflasi=data_bundle["asumsi_inflasi"]
+                asumsi_inflasi=data_bundle["asumsi_inflasi"],
+                df_tmi=data_bundle["asumsi_tmi"],
+                pad_mortality=pad_mortality_input,
             )
 
             # Menampilkan tabel
