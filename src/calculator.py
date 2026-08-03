@@ -205,9 +205,6 @@ def get_inflation_rate(tanggal_mulai, asumsi_inflasi):
         return match.iloc[0, 1] # Mengambil nilai rate
     return 0.0
 
-import pandas as pd
-import numpy as np
-
 def generate_cashflow_projection2(df_header, df_detail, pad_expense=0.0, monthly_inflation=0.0, asumsi_inflasi=None, df_tmi=None, pad_mortality=0.0):
     # 1. Gabungkan (Merge) df_detail dan df_header agar panjang barisnya konsisten
     # Pastikan ada kolom kunci yang sama, misal 'Policy_ID' atau 'A_PolicyNo'. 
