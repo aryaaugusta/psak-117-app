@@ -118,7 +118,9 @@ if uploaded_file is not None:
                 monthly_inflation=monthly_inflation_input,
                 asumsi_inflasi=data_bundle["asumsi_inflasi"],
                 df_tmi=data_bundle["asumsi_tmi"],
+                asumsi_lapse_monthly=data_bundle["asumsi_lapse_m2"],
                 pad_mortality=pad_mortality_input,
+                pad_lapse=pad_lapse_input
             )
 
             # Menampilkan tabel

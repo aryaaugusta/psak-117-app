@@ -206,7 +206,11 @@ def get_inflation_rate(tanggal_mulai, asumsi_inflasi):
     return 0.0
 
 
-def generate_cashflow_projection2(df_header, df_detail, pad_expense=0.0, monthly_inflation=0.0, asumsi_inflasi=None, df_tmi=None, pad_mortality=0.0, total_nd_global=0.0):
+def generate_cashflow_projection2(df_header, df_detail, pad_expense=0.0, monthly_inflation=0.0, 
+                                  asumsi_inflasi=None, df_tmi=None, pad_mortality=0.0, 
+                                  total_nd_global=0.0, total_joint_term_life_global=0.0, total_nd_joint_global=0.0,
+                                  total_pa_global=0.0, total_ci_global=0.0, total_tpd_global=0.0, total_cp_global=0.0,
+                                  asumsi_lapse_monthly=None, pad_lapse=0.0):
     # 1. Gabungkan (Merge) df_detail dan df_header agar panjang barisnya konsisten
     # Pastikan ada kolom kunci yang sama, misal 'Policy_ID' atau 'A_PolicyNo'. 
     # Jika struktur baris sudah sejajar persis, bisa langsung di-assign.
@@ -219,6 +223,9 @@ def generate_cashflow_projection2(df_header, df_detail, pad_expense=0.0, monthly
     # 2. Hitung PAD Expense & Fixed Cost Value
     pct_premi = df['Biaya_Pemeliharaan_Polis_PCT_Premi']
     fixed_cost = df['Biaya_Pemeliharaan_Polis_Fixed_Cost']
+
+    # MPP
+    # mpp = df['Masa_Pembayaran_Premi_Dasar']
     
     pad_value = pct_premi * (1 + pad_expense)
     fixed_cost_value = fixed_cost * (1 + pad_expense)
@@ -249,11 +256,83 @@ def generate_cashflow_projection2(df_header, df_detail, pad_expense=0.0, monthly
             # VLOOKUP kolom ke-7 berarti index 6
             return match.iloc[0, 6] 
         return 0.0
+    
+    def lookup_tmi_term_life_joint(usia):
+        if df_tmi is None:
+            return 0.0
+        match = df_tmi[df_tmi.iloc[:, 0] == usia]
+        if not match.empty:
+            # VLOOKUP kolom ke-9 berarti index 8
+            return match.iloc[0, 8] 
+        return 0.0
+
+    def lookup_tmi_nd_joint(usia):
+        if df_tmi is None:
+            return 0.0
+        match = df_tmi[df_tmi.iloc[:, 0] == usia]
+        if not match.empty:
+            # VLOOKUP kolom ke-11 berarti index 10
+            return match.iloc[0, 10] 
+        return 0.0
+
+    def lookup_tmi_pa(usia):
+        if df_tmi is None:
+            return 0.0
+        match = df_tmi[df_tmi.iloc[:, 0] == usia]
+        if not match.empty:
+            # VLOOKUP kolom ke-13 berarti index 12
+            return match.iloc[0, 12] 
+        return 0.0
+
+    def lookup_tmi_ci(usia):
+        if df_tmi is None:
+                return 0.0
+        match = df_tmi[df_tmi.iloc[:, 0] == usia]
+        if not match.empty:
+            # VLOOKUP kolom ke-15 berarti index 14
+            return match.iloc[0, 14] 
+        return 0.0
+
+    def lookup_tmi_tpd(usia):
+        if df_tmi is None:
+                return 0.0
+        match = df_tmi[df_tmi.iloc[:, 0] == usia]
+        if not match.empty:
+            # VLOOKUP kolom ke-17 berarti index 16
+            return match.iloc[0, 16] 
+        return 0.0
+
+    def lookup_tmi_cp(usia):
+        if df_tmi is None:
+                return 0.0
+        match = df_tmi[df_tmi.iloc[:, 0] == usia]
+        if not match.empty:
+            # VLOOKUP kolom ke-19 berarti index 18
+            return match.iloc[0, 18] 
+        return 0.0
 
     df['Base_qx'] = df['Usia_Tertanggung'].apply(lookup_tmi)
 
-    # 2. Cari nilai qx untuk ND dari TMI
+    # Cari nilai qx untuk ND dari TMI
     df['Base_qx_ND'] = df['Usia_Tertanggung'].apply(lookup_tmi_nd)
+
+    # Cari nilai qx untuk Term Life Joint dari TMI
+    df['Base_qx_Term_Life_Joint'] = df['Usia_Tertanggung'].apply(lookup_tmi_term_life_joint)
+
+    # Cari nilai qx untuk ND Joint dari TMI
+    df['Base_qx_ND_Joint'] = df['Usia_Tertanggung'].apply(lookup_tmi_nd_joint)
+
+    # Cari nilai qx untuk PA dari TMI
+    df['Base_qx_PA'] = df['Usia_Tertanggung'].apply(lookup_tmi_pa)
+
+    # Cari nilai qx untuk CI dari TMI
+    df['Base_qx_CI'] = df['Usia_Tertanggung'].apply(lookup_tmi_ci)
+
+    # Cari nilai qx untuk TPD dari TMI
+    df['Base_qx_TPD'] = df['Usia_Tertanggung'].apply(lookup_tmi_tpd)
+
+    # Cari nilai qx untuk CP dari TMI
+    df['Base_qx_CP'] = df['Usia_Tertanggung'].apply(lookup_tmi_cp)
 
     # 5. Logika Monthly qx (Term Life)
     # Pastikan Pol_Term_M minimal bernilai 1
@@ -271,9 +350,116 @@ def generate_cashflow_projection2(df_header, df_detail, pad_expense=0.0, monthly
     df['Monthly_qx'] = np.where(kondisi, df['Base_qx'] * (1 + pad_mortality), 0.0)
 
     is_nd_total_zero = (total_nd_global == 0)
+    is_term_life_joint_total_zero = (total_joint_term_life_global == 0)
+    is_nd_joint_total_zero = (total_nd_joint_global == 0)
+    is_pa_total_zero = (total_pa_global == 0)
+    is_ci_total_zero = (total_ci_global == 0)
+    is_tpd_total_zero = (total_tpd_global == 0)
+    is_cp_total_zero = (total_cp_global == 0)
 
     df['Monthly_qx_ND'] = np.where(is_nd_total_zero, 0.0, np.where(kondisi, df['Base_qx_ND'] * (1 + pad_mortality), 0.0))
-        #np.where(0.0, 0.0, np.where(kondisi, df['Base_qx_ND'] * (1 + pad_mortality), 0.0))
+
+    df['Monthly_qx_Term_Life_Joint'] = np.where(is_term_life_joint_total_zero, 0.0, np.where(kondisi, df['Base_qx_Term_Life_Joint'] * (1 + pad_mortality), 0.0))
+
+    df['Monthly_qx_ND_Joint'] = np.where(is_nd_joint_total_zero, 0.0, np.where(kondisi, df['Base_qx_ND_Joint'] * (1 + pad_mortality), 0.0))
+
+    df['Monthly_qx_PA'] = np.where(is_pa_total_zero, 0.0, np.where(kondisi, df['Base_qx_PA'] * (1 + pad_mortality), 0.0))
+
+    df['Monthly_qx_CI'] = np.where(is_ci_total_zero, 0.0, np.where(kondisi, df['Base_qx_CI'] * (1 + pad_mortality), 0.0))
+
+    df['Monthly_qx_TPD'] = np.where(is_tpd_total_zero, 0.0, np.where(kondisi, df['Base_qx_TPD'] * (1 + pad_mortality), 0.0))
+
+    df['Monthly_qx_CP'] = np.where(is_cp_total_zero, 0.0, np.where(kondisi, df['Base_qx_CP'] * (1 + pad_mortality), 0.0))
+
+    """
+    Menghitung Monthly qx (Lapse) menggunakan 2D Lookup pada tabel Lapse Rate.
+    Rumus: (Tahun Polis > 0) * (Tahun Polis < Masa Asuransi) * VLOOKUP(MPP, Tabel, Tahun Polis + 1) * (1 + PAD Lapse)
+    """
+    
+    # def get_lapse_rate(mpp, tahun_polis, table):
+    #     # Cari baris berdasarkan MPP (asumsi kolom pertama tabel adalah MPP)
+    #     # print(f"MASA PEMBAYARAN PREMI: {mpp} | TAHUN POLIS:{tahun_polis} | TABLE LAPSE MONTHLY:\n{table}")
+    #     row_match = table[table.iloc[:, 0] == mpp]
+    #     if row_match.empty:
+    #         return 0.0
+        
+    #     # Cari kolom berdasarkan Tahun Polis + 1
+    #     # Menggunakan .iloc untuk akses berdasarkan index kolom
+    #     try:
+    #         # tahun_polis + 1 karena di Excel indeks kolomnya geser
+    #         col_idx = tahun_polis 
+    #         rate = row_match.iloc[0, col_idx]
+    #         return rate
+    #     except:
+    #         return 0.0
+
+    def get_lapse_rate(mpp, tahun_polis, table):
+        try:
+            # --- DEBUGGING START ---
+            # print nilai yang kita cari dan apa yang tersedia di kolom pertama tabel
+            # if 'debug_printed' not in globals():
+            #     print(f"DEBUG: Mencari MPP = '{mpp}' (tipe: {type(mpp)})")
+            #     print(f"DEBUG: Isi kolom pertama tabel: {table.iloc[:, 0].tolist()}")
+            #     global debug_printed
+            #     debug_printed = True
+            # --- DEBUGGING END ---
+
+            # 1. Bersihkan dan samakan tipe data MPP menjadi integer
+            mpp_clean = int(float(mpp)) if pd.notnull(mpp) else 0
+            tahun_polis_int = int(float(tahun_polis))
+            
+            # Konversi kolom pertama tabel asumsi ke numerik untuk menghindari error string/float
+            col_mpp = pd.to_numeric(table.iloc[:, 0], errors='coerce')
+
+            table_mpp = pd.to_numeric(table.iloc[:, 0], errors='coerce')
+            mpp_search = pd.to_numeric(mpp, errors='coerce')
+            
+            # Cari baris berdasarkan MPP
+            # row_match = table[col_mpp == mpp_clean]
+            row_match = table[table_mpp == mpp_search]
+
+            # print(f"DEBUG COL MPP = {col_mpp}")
+            # print(f"DEBUG MPP CLEAN = {mpp_clean}")
+            # print(f"DEBUG TAHUN POLIS INT = {tahun_polis_int}")
+            
+            if row_match.empty:
+                # Debugging: Jika baris tidak ketemu, cetak info ini di terminal
+                print(f"DEBUG: MPP '{mpp_clean}' tidak ditemukan di tabel Lapse Rate!")
+                return 0.0
+            
+            # 2. Ambil nilai berdasarkan kolom (Tahun Polis + 1)
+            # Karena di Excel VLOOKUP kolom ke-(tahun_polis + 1)
+            col_idx = tahun_polis_int 
+            rate = row_match.iloc[0, col_idx]
+            
+            return float(rate) if pd.notnull(rate) else 0.0
+            
+        except Exception as e:
+            print(f"DEBUG Error get_lapse_rate: {e}")
+            return 0.0
+
+    # Pastikan kolom referensi ada
+    if 'Masa_Pembayaran_Premi_Dasar' not in df.columns or 'A_Policy_Year' not in df.columns:
+        print("DEBUG: Kolom 'Masa_Pembayaran_Premi_Dasar' atau 'A_Policy_Year' tidak ditemukan di DataFrame!")
+        df['Monthly_qx_Lapse'] = 0.0
+        return df
+
+    # 1. Terapkan fungsi untuk setiap baris
+    df['Base_Lapse_Rate'] = df.apply(lambda x: get_lapse_rate(x['Masa_Pembayaran_Premi_Dasar'], x['A_Policy_Year']+1, asumsi_lapse_monthly), axis=1)
+
+    # 2. Rumus: (Tahun Polis > 0) * (Tahun Polis < Masa Asuransi)
+    # Catatan: Asumsi 'Pol_Term_Y' adalah Masa Asuransi dalam tahun
+    # kondisi_monthly_lapse = (df['A_Policy_Year'] > 0) & (df['A_Policy_Year'] < df['Pol_Term_Y'])
+    # print(f"KONDISI MONTHLY LAPSE: {kondisi_monthly_lapse}")
+
+    # 2. Sesuai Rumus Excel: (Tahun Polis > 0) * (Tahun Polis < Masa Asuransi)
+    # Pastikan nama kolom masa asuransi sesuai (misal: 'Pol_Term_Y')
+    masa_asuransi = df['Pol_Term_Y'] if 'Pol_Term_Y' in df.columns else 3
+    
+    kondisi_monthly_lapse = (df['A_Policy_Year'] > 0) & (df['A_Policy_Year'] < masa_asuransi)
+
+    # 3. Kalkulasi Final Monthly qx (Lapse) dengan PAD Lapse
+    df['Monthly_qx_Lapse'] = kondisi_monthly_lapse.astype(int) * df['Base_Lapse_Rate'] * (1 + pad_lapse)
 
     # 6. Susun DataFrame Hasil Proyeksi
     projection = pd.DataFrame({
@@ -288,117 +474,14 @@ def generate_cashflow_projection2(df_header, df_detail, pad_expense=0.0, monthly
         "Yearly Rate CV": df['Yearly_Rate_Cash_Value'],
         "Monthly Rate CV": df['Monthly_Rate_Cash_Value'],
         "Monthly qx (Term Life)": df['Monthly_qx'],
-        "Monthly qx (ND)": df['Monthly_qx_ND']
+        "Monthly qx (ND)": df['Monthly_qx_ND'],
+        "Monthly qx (Term Life Joint)": df['Monthly_qx_Term_Life_Joint'],
+        "Monthly qx (ND Joint)": df['Monthly_qx_ND_Joint'],
+        "Monthly qx (PA)": df['Monthly_qx_PA'],
+        "Monthly qx (CI)": df['Monthly_qx_CI'],
+        "Monthly qx (TPD)": df['Monthly_qx_TPD'],
+        "Monthly qx (CP)": df['Monthly_qx_CP'],
+        "Monthly qx (Lapse)": df['Monthly_qx_Lapse']
     })
     
     return projection
-
-# def generate_cashflow_projection2(df_header, df_detail, pad_expense=0.0, monthly_inflation=0.0, asumsi_inflasi=None, df_tmi=None, pad_mortality=0.0):
-#     """
-#     Melakukan looping pada setiap baris di df_detail dan menghasilkan proyeksi
-#     untuk seluruh polis yang ada di dalam sheet.
-#     """
-#     all_projections = []
-
-#     # Mengambil nilai PCT_Premi dari sheet Detail
-#     pct_premi = df_detail['Biaya_Pemeliharaan_Polis_PCT_Premi']
-
-#     # Mengambil nilai Fixed Cost dari sheet Detail
-#     fixed_cost = df_detail['Biaya_Pemeliharaan_Polis_Fixed_Cost']
-
-#     # Rumus Excel: Biaya_Pemeliharaan_Polis_PCT_Premi * (1 + PAD Expense)
-#     pad_value = pct_premi * (1 + pad_expense)
-
-#     # Rumus Excel: Biaya_Pemeliharaan_Polis_Fixed_Cost * (1 + PAD Expense)
-#     fixed_cost_value = fixed_cost * (1 + pad_expense)
-
-#     # print(f"FIXED COST VALUE: {fixed_cost_value} | FIXED COST: {fixed_cost}")
-#     # print(f"DATA FRAME DETAIL: {df_detail}")
-
-#     # Mengambil parameter dari setiap baris
-#     tahun_polis = df_detail['A_Policy_Year']
-#     bulan_ke = df_detail['Bulan_Ke']
-#     premium = df_detail['Premi']
-#     komisi = df_detail['Komisi']
-#     akuisisi = df_detail['Biaya_Akuisisi']
-#     pct_premi = df_detail['Biaya_Pemeliharaan_Polis_PCT_Premi']
-#     fixed_cost_base = df_detail['Biaya_Pemeliharaan_Polis_Fixed_Cost']
-#     # duration = df_detail['Duration_Years']
-#     yearly_rate_cv = df_detail['Yearly_Rate_Cash_Value']
-#     monthly_rate_cv = df_detail['Monthly_Rate_Cash_Value']
-        
-#     # Perhitungan PAD Expense
-#     pad_value = pct_premi * (1 + pad_expense)
-
-#     df = df_header.copy()
-
-#     # if 'A_PolicyNo' in df_detail.columns and 'A_PolicyNo' in df_header.columns:
-#     #     df_merged = pd.merge(df_detail, df_header[['A_PolicyNo', 'Pol_Term_M', 'Pol_Term_Y']], on='A_PolicyNo', how='left')
-#     # else:
-#     #     # Jika tidak ada key eksplisit, kita asumsikan baris sudah sejajar atau menggunakan join indeks
-#     #     df_merged = df_detail.copy()
-#     #     if 'Pol_Term_M' in df_header.columns:
-#     #         df_merged['Pol_Term_M'] = df_header['Pol_Term_M'].values[0] # Sesuaikan jika per baris
-#     #     elif 'Pol_Term_Y' in df_header.columns:
-#     #         df_merged['Pol_Term_M'] = df_header['Pol_Term_Y'] * 12
-
-#     # 1. Hitung inflasi tahunan per baris
-#     df['Inflasi_Tahunan'] = df['Effective'].apply(
-#         lambda x: get_inflation_rate(x, asumsi_inflasi)
-#     )
-
-#     # 2. Hitung Inflasi Bulanan: (1 + inflasi tahunan)^(1/12) - 1
-#     inflasi_bulanan = (1 + df['Inflasi_Tahunan']) ** (1/12) - 1
-
-#     # 2. Pastikan Pol_Term_M minimal bernilai 1 (tidak mulai dari 0)
-#     # df_merged['Pol_Term_M'] = df_merged['Pol_Term_M'].apply(lambda x: max(1, int(x)) if pd.notnull(x) else 1)
-
-#     def lookup_tmi(usia):
-#         # Cari baris di df_tmi di mana kolom usia cocok
-#         # Asumsi kolom pertama df_tmi adalah usia, dan kolom ke-5 (index 4) adalah nilai qx
-#         match = df_tmi[df_tmi.iloc[:, 0] == usia]
-#         if not match.empty:
-#             return match.iloc[0, 4] # Mengambil kolom ke-5 (index 4)
-#         return 0.0
-
-#     # 1. Cari nilai dasar qx dari tabel TMI berdasarkan Usia Tertanggung
-#     df_header['Base_qx'] = df_header['Usia_Tertanggung'].apply(lookup_tmi)
-
-#     print(f"BASE QX: {df_header['Base_qx']}")
-
-#     # 2. Terapkan Logika IF & AND sesuai rumus Excel:
-#     # Kondisi: (Bulan_Ke <= Pol_Term_M - 1) AND (Bulan_Ke <> 0)
-#     # Catatan: Sesuaikan nama kolom masa asuransi dengan data Anda (misal: 'Pol_Term_M' atau 'Masa_Asuransi_Bulan')
-#     masa_asuransi_bulan =  df_header['Pol_Term_M']
-
-#     print(f"MASA ASURANSI BULAN: {masa_asuransi_bulan}")
-    
-#     kondisi = (bulan_ke <= (masa_asuransi_bulan - 1)) & (bulan_ke != 0)
-    
-#     # df['Monthly_qx'] = np.where(
-#     #     kondisi, 
-#     #     df['Base_qx'] * (1 + pad_mortality), 
-#     #     0.0
-#     # )
-
-#     # Kalkulasi: Base_qx * (1 + PAD_Mortality) jika kondisi True, selain itu 0
-#     df['Monthly_qx'] = np.where(kondisi, df['Base_qx'] * (1 + pad_mortality), 0.0)
-
-#     monthly_qx_term_life = df['Monthly_qx']
-            
-#     projection = pd.DataFrame({
-#         "Tahun Polis": tahun_polis,
-#         "Bulan ke-": bulan_ke,
-#         "Premi": premium ,
-#         "Komisi": komisi ,
-#         "Biaya Akuisisi": akuisisi ,
-#         "% Premi (PAD)": pad_value ,
-#         "Fixed Cost": fixed_cost_value, 
-#         "Fixed Cost (Dihitung CARE)": round(fixed_cost_value * ((1 + monthly_inflation) ** (bulan_ke))),
-#         "Yearly Rate CV": yearly_rate_cv,
-#         "Monthly Rate CV": monthly_rate_cv,
-#         "Monthly qx (Term Life)": monthly_qx_term_life
-#     })
-#     all_projections.append(projection)
-    
-#     return pd.concat(all_projections, ignore_index=True)
