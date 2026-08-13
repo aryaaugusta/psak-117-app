@@ -375,67 +375,42 @@ def generate_cashflow_projection2(df_header, df_detail, pad_expense=0.0, monthly
     Menghitung Monthly qx (Lapse) menggunakan 2D Lookup pada tabel Lapse Rate.
     Rumus: (Tahun Polis > 0) * (Tahun Polis < Masa Asuransi) * VLOOKUP(MPP, Tabel, Tahun Polis + 1) * (1 + PAD Lapse)
     """
-    
-    # def get_lapse_rate(mpp, tahun_polis, table):
-    #     # Cari baris berdasarkan MPP (asumsi kolom pertama tabel adalah MPP)
-    #     # print(f"MASA PEMBAYARAN PREMI: {mpp} | TAHUN POLIS:{tahun_polis} | TABLE LAPSE MONTHLY:\n{table}")
-    #     row_match = table[table.iloc[:, 0] == mpp]
-    #     if row_match.empty:
-    #         return 0.0
-        
-    #     # Cari kolom berdasarkan Tahun Polis + 1
-    #     # Menggunakan .iloc untuk akses berdasarkan index kolom
-    #     try:
-    #         # tahun_polis + 1 karena di Excel indeks kolomnya geser
-    #         col_idx = tahun_polis 
-    #         rate = row_match.iloc[0, col_idx]
-    #         return rate
-    #     except:
-    #         return 0.0
 
-    def get_lapse_rate(mpp, tahun_polis, table):
+    def get_lapse_rate(row, table):
         try:
-            # --- DEBUGGING START ---
-            # print nilai yang kita cari dan apa yang tersedia di kolom pertama tabel
-            # if 'debug_printed' not in globals():
-            #     print(f"DEBUG: Mencari MPP = '{mpp}' (tipe: {type(mpp)})")
-            #     print(f"DEBUG: Isi kolom pertama tabel: {table.iloc[:, 0].tolist()}")
-            #     global debug_printed
-            #     debug_printed = True
-            # --- DEBUGGING END ---
-
-            # 1. Bersihkan dan samakan tipe data MPP menjadi integer
-            mpp_clean = int(float(mpp)) if pd.notnull(mpp) else 0
-            tahun_polis_int = int(float(tahun_polis))
+            # 1. Ambil UW_Year dari tanggal Effective polis
+            tanggal_eff = pd.to_datetime(row.get('Effective', '2023-01-01'))
+            uw_year_target = tanggal_eff.year
             
-            # Konversi kolom pertama tabel asumsi ke numerik untuk menghindari error string/float
-            col_mpp = pd.to_numeric(table.iloc[:, 0], errors='coerce')
-
-            table_mpp = pd.to_numeric(table.iloc[:, 0], errors='coerce')
-            mpp_search = pd.to_numeric(mpp, errors='coerce')
+            # 2. Ambil nilai MPP (Masa Pembayaran Premi)
+            mpp_val = row.get('Masa_Pembayaran_Premi_Dasar', 0)
+            mpp_clean = int(float(mpp_val)) if pd.notnull(mpp_val) else 0
             
-            # Cari baris berdasarkan MPP
-            # row_match = table[col_mpp == mpp_clean]
-            row_match = table[table_mpp == mpp_search]
-
-            # print(f"DEBUG COL MPP = {col_mpp}")
-            # print(f"DEBUG MPP CLEAN = {mpp_clean}")
-            # print(f"DEBUG TAHUN POLIS INT = {tahun_polis_int}")
+            # 3. PERBAIKAN: Utamakan mengambil nilai dari kolom 'A_Policy_Year'
+            tahun_polis_val = row.get('A_Policy_Year', 1)
+            tahun_polis_int = int(float(tahun_polis_val)) if pd.notnull(tahun_polis_val) else 1
+            
+            # 4. Filter baris tabel berdasarkan UW_Year DAN MPP
+            col_uw = pd.to_numeric(table.iloc[:, 0], errors='coerce').astype('Int64')
+            col_mpp = pd.to_numeric(table.iloc[:, 1], errors='coerce').astype('Int64')
+            
+            row_match = table[(col_uw == uw_year_target) & (col_mpp == mpp_clean)]
             
             if row_match.empty:
-                # Debugging: Jika baris tidak ketemu, cetak info ini di terminal
-                print(f"DEBUG: MPP '{mpp_clean}' tidak ditemukan di tabel Lapse Rate!")
                 return 0.0
             
-            # 2. Ambil nilai berdasarkan kolom (Tahun Polis + 1)
-            # Karena di Excel VLOOKUP kolom ke-(tahun_polis + 1)
-            col_idx = tahun_polis_int 
-            rate = row_match.iloc[0, col_idx]
+            # 5. Ambil posisi kolom (Tahun Polis + 1)
+            # Index 0: UW_Year | Index 1: MPP/Year | Index 2: Tahun 1 | Index 3: Tahun 2 | Index 4: Tahun 3 ...
+            col_idx = tahun_polis_int + 1
             
-            return float(rate) if pd.notnull(rate) else 0.0
+            # Pengecekan batas kolom agar tidak IndexError
+            if col_idx < len(row_match.columns):
+                rate = row_match.iloc[0, col_idx]
+                return float(rate) if pd.notnull(rate) else 0.0
+                
+            return 0.0
             
         except Exception as e:
-            print(f"DEBUG Error get_lapse_rate: {e}")
             return 0.0
 
     # Pastikan kolom referensi ada
@@ -445,18 +420,21 @@ def generate_cashflow_projection2(df_header, df_detail, pad_expense=0.0, monthly
         return df
 
     # 1. Terapkan fungsi untuk setiap baris
-    df['Base_Lapse_Rate'] = df.apply(lambda x: get_lapse_rate(x['Masa_Pembayaran_Premi_Dasar'], x['A_Policy_Year']+1, asumsi_lapse_monthly), axis=1)
+    # df['Base_Lapse_Rate'] = df.apply(lambda x: get_lapse_rate(x['Masa_Pembayaran_Premi_Dasar'], x['A_Policy_Year']+1, asumsi_lapse_monthly), axis=1)
+    # Terapkan fungsi lookup per baris dengan axis=1
+    df['Base_Lapse_Rate'] = df.apply(
+        lambda row: get_lapse_rate(row, asumsi_lapse_monthly), 
+        axis=1
+    )
 
-    # 2. Rumus: (Tahun Polis > 0) * (Tahun Polis < Masa Asuransi)
-    # Catatan: Asumsi 'Pol_Term_Y' adalah Masa Asuransi dalam tahun
-    # kondisi_monthly_lapse = (df['A_Policy_Year'] > 0) & (df['A_Policy_Year'] < df['Pol_Term_Y'])
-    # print(f"KONDISI MONTHLY LAPSE: {kondisi_monthly_lapse}")
+    # 2. Ambil Masa Asuransi dalam Bulan (Pol_Term_M) dari Header atau kolom terkait
+    masa_asuransi_bulan = df['Pol_Term_M'] if 'Pol_Term_M' in df.columns else (df.get('Pol_Term_Y', 3) * 12)
 
-    # 2. Sesuai Rumus Excel: (Tahun Polis > 0) * (Tahun Polis < Masa Asuransi)
-    # Pastikan nama kolom masa asuransi sesuai (misal: 'Pol_Term_Y')
-    masa_asuransi = df['Pol_Term_Y'] if 'Pol_Term_Y' in df.columns else 3
-    
-    kondisi_monthly_lapse = (df['A_Policy_Year'] > 0) & (df['A_Policy_Year'] < masa_asuransi)
+    # 3. KONDISI BARU: 
+    # - Bulan_Ke harus > 0
+    # - Bulan_Ke harus KURANG DARI Pol_Term_M (sehingga saat masuk bulan ke-36 / pas di Pol_Term_M, hasilnya False -> jadi 0)
+    bulan_ke = df['Bulan_Ke']
+    kondisi_monthly_lapse = (bulan_ke > 0) & (bulan_ke < masa_asuransi_bulan)
 
     # 3. Kalkulasi Final Monthly qx (Lapse) dengan PAD Lapse
     df['Monthly_qx_Lapse'] = kondisi_monthly_lapse.astype(int) * df['Base_Lapse_Rate'] * (1 + pad_lapse)

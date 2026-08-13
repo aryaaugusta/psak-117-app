@@ -93,6 +93,32 @@ if uploaded_file is not None:
                 
         # --- TAB BEL ---
         with tab_bel:
+
+            def highlight_lapse_column(df):
+                """
+                Memberikan highlight kuning pada kolom Lapse dan mengatur format desimal
+                hanya untuk kolom tertentu, sementara kolom lain tetap bersih.
+                """
+                # 1. Tentukan daftar kolom mata uang / nominal yang ingin ditampilkan tanpa desimal (.000000)
+                # Sesuaikan dengan nama kolom yang ada di dataframe Anda
+                cols_to_format_int = ['% Premi (PAD)', 'Fixed Cost', 'Fixed Cost (Dihitung CARE)', 
+                                      'Monthly qx (ND)', 'Monthly qx (Term Life Joint)', 'Monthly qx (ND Joint)', 'Monthly qx (PA)',
+                                      'Monthly qx (CI)', 'Monthly qx (TPD)', 'Monthly qx (CP)']
+                
+                styler = df.style.set_properties(
+                    subset=['Monthly qx (Lapse)'], 
+                    **{'background-color': '#FFF2CC', 'color': 'black', 'font-weight': 'bold'}
+                ).format(
+                    # Format 6 desimal khusus untuk kolom Lapse
+                    "{:.6f}", subset=['Monthly qx (Lapse)']
+                ).format(
+                    # Format tanpa desimal (integer) untuk kolom nominal uang
+                    "{:.0f}", subset=[c for c in cols_to_format_int if c in df.columns]
+                )
+                
+                return styler
+
+            # df_bel_projection_styled = highlight_lapse_column(df_bel_result)
             st.subheader("Perhitungan Proyeksi Best Estimate Liability (BEL) - Mata Uang IDR")
             # st.metric("Total BEL Terdiskonto (Global)", format_idr(total_bel_val))
             st.dataframe(df_bel_result, use_container_width=True)
@@ -100,17 +126,6 @@ if uploaded_file is not None:
             # st.subheader("📋 Proyeksi Arus Kas Bulanan (Cash Flow)")
             st.markdown("---")
 
-            # Contoh parameter (bisa diambil dari df_header nantinya)
-            # df_proyeksi = generate_cashflow_projection(
-            #     duration_years=3, 
-            #     premium=df_gmm["Premi"].iloc[0], 
-            #     komisi=df_detail["Komisi"].iloc[0], 
-            #     biaya_akuisisi=df_detail["Biaya_Akuisisi"].iloc[0], 
-            #     # pad_percent=0.075, # 27.600 / 368.000 = 0.075
-            #     pad_expense=pad_expense_input,
-            #     fixed_cost_base=pad_expense_input,
-            #     df_detail=df_detail
-            # )
             df_proyeksi = generate_cashflow_projection2(
                 df_header=df_header,
                 df_detail=df_detail, 
@@ -125,7 +140,8 @@ if uploaded_file is not None:
 
             # Menampilkan tabel
             df_proyeksi.index += 1
-            st.dataframe(df_proyeksi, use_container_width=True)
+            df_proyeksi_styled = highlight_lapse_column(df_proyeksi)
+            st.dataframe(df_proyeksi_styled, use_container_width=True)
             
         # --- TAB RA & CSM ---
         with tab_ra_csm:
