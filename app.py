@@ -109,7 +109,8 @@ if uploaded_file is not None:
                 cols_to_format_zero_one = ['Monthly qx (Mature)']
 
                 # Kolom berformat 6 desimal (Rate & Decrement)
-                cols_to_format_decimal = ['Survive beginning', 'Term Life', 'Lapse', 'Mature', 'Survive ending']
+                cols_to_format_decimal = ['Survive beginning', 'Term Life', 'Lapse', 'Mature', 'Survive ending', 'ND', 
+                                          'Term Life Joint', 'ND Joint', 'PA', 'CI', 'TPD', 'CP',]
                 
                 styler = df.style.set_properties(
                     subset=['Monthly qx (Lapse)'], 

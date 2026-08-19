@@ -445,8 +445,15 @@ def generate_cashflow_projection2(df_header, df_detail, pad_expense=0.0, monthly
     # Inisialisasi list untuk menampung hasil perhitungan decrement
     survive_beg_list = []
     term_life_list = []
+    nd_list = []
     lapse_list = []
     mature_list = []
+    term_life_joint_list = []
+    nd_joint_list = []
+    pa_list = []
+    ci_list = []
+    tpd_list = []
+    cp_list = []
     survive_end_list = []
 
     # Dictionary untuk melacak survive ending per polis (jika ada banyak polis)
@@ -462,15 +469,33 @@ def generate_cashflow_projection2(df_header, df_detail, pad_expense=0.0, monthly
         else:
             survive_beg = prev_survive_end_dict.get(policy_id, 1.0)
 
-        # Ambil nilai qx masing-masing decrement
-        q_term = row.get('Monthly_qx', 0.0)
-        q_lapse = row.get('Monthly_qx_Lapse', 0.0)
-        q_mature = row.get('Monthly_qx_Mature', 0.0)
+        # Ambil nilai qx masing-masing decrement (menggunakan .get untuk keamanan nama kolom)
+        q_term = row.get('Monthly_qx', row.get('Monthly qx (Term Life)', 0.0))
+        q_nd = row.get('Monthly_qx_ND', row.get('Monthly qx (ND)', 0.0))
+        q_lapse = row.get('Monthly_qx_Lapse', row.get('Monthly qx (Lapse)', 0.0))
+        q_mature = row.get('Monthly_qx_Mature', row.get('Monthly qx (Mature)', 0.0))
+        q_term_joint = row.get('Monthly_qx_Term_Life_Joint', row.get('Monthly qx (Term Life Joint)', 0.0))
+        q_nd_joint = row.get('Monthly_qx_ND_Joint', row.get('Monthly qx (ND Joint)', 0.0))
+        q_pa = row.get('Monthly_qx_PA', row.get('Monthly qx (PA)', 0.0))
+        q_ci = row.get('Monthly_qx_CI', row.get('Monthly qx (CI)', 0.0))
+        q_tpd = row.get('Monthly_qx_TPD', row.get('Monthly qx (TPD)', 0.0))
+        q_cp = row.get('Monthly_qx_CP', row.get('Monthly qx (CP)', 0.0))
 
-        # 2. Rumus Decrement Term Life, Lapse, Mature
+        # 2. Rumus Decrement = Monthly qx * Survive beginning
         term_life_val = q_term * survive_beg
+        nd_val = q_nd * survive_beg
         lapse_val = q_lapse * survive_beg
         mature_val = q_mature * survive_beg
+        term_life_joint_val = q_term_joint * survive_beg
+        nd_joint_val = q_nd_joint * survive_beg
+        pa_val = q_pa * survive_beg
+        ci_val = q_ci * survive_beg
+        tpd_val = q_tpd * survive_beg
+        cp_val = q_cp * survive_beg
+
+        # Total seluruh decrement pada bulan tersebut
+        total_decr = (term_life_val + nd_val + lapse_val + mature_val + 
+                      term_life_joint_val + nd_joint_val + pa_val + ci_val + tpd_val + cp_val)
 
         # 3. Survive ending: =IF(Bulan_Ke=0; 0; survive beginning - (term life + lapse + mature))
         if bulan_ke == 0:
@@ -483,8 +508,15 @@ def generate_cashflow_projection2(df_header, df_detail, pad_expense=0.0, monthly
 
         survive_beg_list.append(survive_beg)
         term_life_list.append(term_life_val)
+        nd_list.append(nd_val)
         lapse_list.append(lapse_val)
         mature_list.append(mature_val)
+        term_life_joint_list.append(term_life_joint_val)
+        nd_joint_list.append(nd_joint_val)
+        pa_list.append(pa_val)
+        ci_list.append(ci_val)
+        tpd_list.append(tpd_val)
+        cp_list.append(cp_val)
         survive_end_list.append(survive_end)
 
     # Masukkan ke kolom DataFrame
@@ -493,6 +525,13 @@ def generate_cashflow_projection2(df_header, df_detail, pad_expense=0.0, monthly
     df['Lapse_Decr'] = lapse_list
     df['Mature_Decr'] = mature_list
     df['Survive_Ending'] = survive_end_list
+    df['ND'] = nd_list
+    df['Term_Life_Joint'] = term_life_joint_list
+    df['ND_Joint'] = nd_joint_list
+    df['PA'] = pa_list
+    df['CI'] = ci_list
+    df['TPD'] = tpd_list
+    df['CP'] = cp_list
 
     # 6. Susun DataFrame Hasil Proyeksi
     projection = pd.DataFrame({
@@ -521,7 +560,14 @@ def generate_cashflow_projection2(df_header, df_detail, pad_expense=0.0, monthly
         "Term Life": df['Term_Life_Decr'],
         "Lapse": df['Lapse_Decr'],
         "Mature": df['Mature_Decr'],
-        "Survive ending": df['Survive_Ending']
+        "Survive ending": df['Survive_Ending'],
+        "ND": df['ND'],
+        "Term Life Joint": df['Term_Life_Joint'],
+        "ND Joint": df['ND_Joint'],
+        "PA": df['PA'],
+        "CI": df['CI'],
+        "TPD": df['TPD'],
+        "CP": df['CP']
     })
     
     return projection
