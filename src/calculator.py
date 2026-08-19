@@ -439,6 +439,61 @@ def generate_cashflow_projection2(df_header, df_detail, pad_expense=0.0, monthly
     # 3. Kalkulasi Final Monthly qx (Lapse) dengan PAD Lapse
     df['Monthly_qx_Lapse'] = kondisi_monthly_lapse.astype(int) * df['Base_Lapse_Rate'] * (1 + pad_lapse)
 
+    # Jika Bulan_Ke sama dengan Masa Asuransi (dalam bulan), bernilai 1, selain itu 0
+    df['Monthly_qx_Mature'] = np.where(bulan_ke == masa_asuransi_bulan, 1.0, 0.0)
+
+    # Inisialisasi list untuk menampung hasil perhitungan decrement
+    survive_beg_list = []
+    term_life_list = []
+    lapse_list = []
+    mature_list = []
+    survive_end_list = []
+
+    # Dictionary untuk melacak survive ending per polis (jika ada banyak polis)
+    prev_survive_end_dict = {}
+
+    for idx, row in df.iterrows():
+        policy_id = row.get('Policy_ID', row.get('A_PolicyNo', 'default_policy'))
+        bulan_ke = row.get('Bulan_Ke', 1)
+        
+        # 1. Survive beginning: Bulan ke-1 selalu 1, bulan berikutnya ambil dari survive ending sebelumnya
+        if bulan_ke == 1 or policy_id not in prev_survive_end_dict:
+            survive_beg = 1.0
+        else:
+            survive_beg = prev_survive_end_dict.get(policy_id, 1.0)
+
+        # Ambil nilai qx masing-masing decrement
+        q_term = row.get('Monthly_qx', 0.0)
+        q_lapse = row.get('Monthly_qx_Lapse', 0.0)
+        q_mature = row.get('Monthly_qx_Mature', 0.0)
+
+        # 2. Rumus Decrement Term Life, Lapse, Mature
+        term_life_val = q_term * survive_beg
+        lapse_val = q_lapse * survive_beg
+        mature_val = q_mature * survive_beg
+
+        # 3. Survive ending: =IF(Bulan_Ke=0; 0; survive beginning - (term life + lapse + mature))
+        if bulan_ke == 0:
+            survive_end = 0.0
+        else:
+            survive_end = survive_beg - (term_life_val + lapse_val + mature_val)
+
+        # Simpan survive ending untuk iterasi bulan berikutnya pada polis yang sama
+        prev_survive_end_dict[policy_id] = survive_end
+
+        survive_beg_list.append(survive_beg)
+        term_life_list.append(term_life_val)
+        lapse_list.append(lapse_val)
+        mature_list.append(mature_val)
+        survive_end_list.append(survive_end)
+
+    # Masukkan ke kolom DataFrame
+    df['Survive_Beginning'] = survive_beg_list
+    df['Term_Life_Decr'] = term_life_list
+    df['Lapse_Decr'] = lapse_list
+    df['Mature_Decr'] = mature_list
+    df['Survive_Ending'] = survive_end_list
+
     # 6. Susun DataFrame Hasil Proyeksi
     projection = pd.DataFrame({
         "Tahun Polis": df['A_Policy_Year'],
@@ -459,7 +514,14 @@ def generate_cashflow_projection2(df_header, df_detail, pad_expense=0.0, monthly
         "Monthly qx (CI)": df['Monthly_qx_CI'],
         "Monthly qx (TPD)": df['Monthly_qx_TPD'],
         "Monthly qx (CP)": df['Monthly_qx_CP'],
-        "Monthly qx (Lapse)": df['Monthly_qx_Lapse']
+        "Monthly qx (Lapse)": df['Monthly_qx_Lapse'],
+        "Monthly qx (Mature)": df['Monthly_qx_Mature'],
+        # Kolom Decrement Baru
+        "Survive beginning": df['Survive_Beginning'],
+        "Term Life": df['Term_Life_Decr'],
+        "Lapse": df['Lapse_Decr'],
+        "Mature": df['Mature_Decr'],
+        "Survive ending": df['Survive_Ending']
     })
     
     return projection

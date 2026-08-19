@@ -104,6 +104,12 @@ if uploaded_file is not None:
                 cols_to_format_int = ['% Premi (PAD)', 'Fixed Cost', 'Fixed Cost (Dihitung CARE)', 
                                       'Monthly qx (ND)', 'Monthly qx (Term Life Joint)', 'Monthly qx (ND Joint)', 'Monthly qx (PA)',
                                       'Monthly qx (CI)', 'Monthly qx (TPD)', 'Monthly qx (CP)']
+
+                # Kolom berformat 0 atau 1 (seperti Mature)
+                cols_to_format_zero_one = ['Monthly qx (Mature)']
+
+                # Kolom berformat 6 desimal (Rate & Decrement)
+                cols_to_format_decimal = ['Survive beginning', 'Term Life', 'Lapse', 'Mature', 'Survive ending']
                 
                 styler = df.style.set_properties(
                     subset=['Monthly qx (Lapse)'], 
@@ -114,6 +120,11 @@ if uploaded_file is not None:
                 ).format(
                     # Format tanpa desimal (integer) untuk kolom nominal uang
                     "{:.0f}", subset=[c for c in cols_to_format_int if c in df.columns]
+                ).format(
+                    # Format integer biasa untuk kolom Mature (0 atau 1)
+                    "{:.0f}", subset=[c for c in cols_to_format_zero_one if c in df.columns]
+                ).format(
+                    "{:.6f}", subset=[c for c in cols_to_format_decimal if c in df.columns]
                 )
                 
                 return styler
