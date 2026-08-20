@@ -459,6 +459,21 @@ def generate_cashflow_projection2(df_header, df_detail, pad_expense=0.0, monthly
     # Dictionary untuk melacak survive ending per polis (jika ada banyak polis)
     prev_survive_end_dict = {}
 
+    # Ambil nilai dasar benefits dari sheet Detail (menggantikan sel R4 dan S4 per baris)
+    base_term_life_benefit = df['Term_Life'] if 'Term_Life' in df.columns else 0.0
+    base_nd_benefit = df['ND'] if 'ND' in df.columns else 0.0
+    base_joint_term_life_benefit = df['Term_Life_Joint'] if 'Term_Life_Joint' in df.columns else 0.0
+    base_joint_nd_benefit = df['ND_Joint'] if 'ND_Joint' in df.columns else 0.0
+    base_pa_benefit = df['PA'] if 'PA' in df.columns else 0.0
+    base_pv_death_before_pv_benefit = df['PV_Death_Before_PV'] if 'PV_Death_Before_PV' in df.columns else 0.0
+    base_ci_benefit = df['CI'] if 'CI' in df.columns else 0.0
+    base_tpd_benefit = df['TPD'] if 'TPD' in df.columns else 0.0
+    base_cp_benefit = df['CP'] if 'CP' in df.columns else 0.0
+
+    # Inisialisasi list penampung
+    term_life_benefit_list = []
+    nd_benefit_list = []
+
     for idx, row in df.iterrows():
         policy_id = row.get('Policy_ID', row.get('A_PolicyNo', 'default_policy'))
         bulan_ke = row.get('Bulan_Ke', 1)
@@ -494,8 +509,8 @@ def generate_cashflow_projection2(df_header, df_detail, pad_expense=0.0, monthly
         cp_val = q_cp * survive_beg
 
         # Total seluruh decrement pada bulan tersebut
-        total_decr = (term_life_val + nd_val + lapse_val + mature_val + 
-                      term_life_joint_val + nd_joint_val + pa_val + ci_val + tpd_val + cp_val)
+        # total_decr = (term_life_val + nd_val + lapse_val + mature_val + 
+        #               term_life_joint_val + nd_joint_val + pa_val + ci_val + tpd_val + cp_val)
 
         # 3. Survive ending: =IF(Bulan_Ke=0; 0; survive beginning - (term life + lapse + mature))
         if bulan_ke == 0:
@@ -519,6 +534,21 @@ def generate_cashflow_projection2(df_header, df_detail, pad_expense=0.0, monthly
         cp_list.append(cp_val)
         survive_end_list.append(survive_end)
 
+        # Rumus Benefits Before Decrement (contoh: dikalikan dengan survive beginning atau basis nilai bulanan)
+        # Sesuai pola aktuaria, nilai benefit sering kali disesuaikan dengan status survive atau langsung dari basisnya
+        term_life_benefit_val = base_term_life_benefit.iloc[idx] # atau dikalikan survive_beg jika proporsional
+        nd_benefit_val = base_nd_benefit.iloc[idx]
+        joint_term_life_benefit_val = base_joint_term_life_benefit.iloc[idx]
+        joint_nd_benefit_val = base_joint_nd_benefit.iloc[idx]
+        pa_benefit_val = base_pa_benefit.iloc[idx]
+        pv_death_before_pv_benefit_val = base_pv_death_before_pv_benefit.iloc[idx]
+        ci_benefit_val = base_ci_benefit.iloc[idx]
+        tpd_benefit_val = base_tpd_benefit.iloc[idx]
+        cp_benefit_val = base_cp_benefit.iloc[idx]
+
+        term_life_benefit_list.append(term_life_benefit_val)
+        nd_benefit_list.append(nd_benefit_val)
+
     # Masukkan ke kolom DataFrame
     df['Survive_Beginning'] = survive_beg_list
     df['Term_Life_Decr'] = term_life_list
@@ -532,6 +562,15 @@ def generate_cashflow_projection2(df_header, df_detail, pad_expense=0.0, monthly
     df['CI'] = ci_list
     df['TPD'] = tpd_list
     df['CP'] = cp_list
+    df['Term_Life_Benefit'] = term_life_benefit_list
+    df['ND_Benefit'] = nd_benefit_list
+    df['Joint_Term_Life_Benefit'] = base_joint_term_life_benefit
+    df['Joint_ND_Benefit'] = base_joint_nd_benefit
+    df['PA_Benefit'] = base_pa_benefit
+    df['PV_Death_Before_PV_Benefit'] = base_pv_death_before_pv_benefit
+    df['CI_Benefit'] = base_ci_benefit
+    df['TPD_Benefit'] = base_tpd_benefit
+    df['CP_Benefit'] = base_cp_benefit
 
     # 6. Susun DataFrame Hasil Proyeksi
     projection = pd.DataFrame({
@@ -567,7 +606,16 @@ def generate_cashflow_projection2(df_header, df_detail, pad_expense=0.0, monthly
         "PA": df['PA'],
         "CI": df['CI'],
         "TPD": df['TPD'],
-        "CP": df['CP']
+        "CP": df['CP'],
+        "Term Life (Benefit)": df['Term_Life_Benefit'],
+        "ND (Benefit)": df['ND_Benefit'],
+        "Term Life Joint (Benefit)": df['Joint_Term_Life_Benefit'],
+        "ND Joint (Benefit)": df['Joint_ND_Benefit'],
+        "PA (Benefit)": df['PA_Benefit'],
+        "PV Death Before PV (Benefit)": df['PV_Death_Before_PV_Benefit'],
+        "CI (Benefit)": df['CI_Benefit'],
+        "TPD (Benefit)": df['TPD_Benefit'],
+        "CP (Benefit)": df['CP_Benefit']
     })
     
     return projection

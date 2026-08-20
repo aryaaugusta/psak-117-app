@@ -2,6 +2,7 @@ import streamlit as st
 from src.data_loader import load_psak117_data
 from src.calculator import calculate_bel, calculate_ra_csm, generate_movement, generate_cashflow_projection, generate_cashflow_projection2
 from src.utils import format_idr, format_date_columns
+import pandas as pd
 
 # 1. Konfigurasi Halaman Streamlit
 st.set_page_config(
@@ -103,7 +104,7 @@ if uploaded_file is not None:
                 # Sesuaikan dengan nama kolom yang ada di dataframe Anda
                 cols_to_format_int = ['% Premi (PAD)', 'Fixed Cost', 'Fixed Cost (Dihitung CARE)', 
                                       'Monthly qx (ND)', 'Monthly qx (Term Life Joint)', 'Monthly qx (ND Joint)', 'Monthly qx (PA)',
-                                      'Monthly qx (CI)', 'Monthly qx (TPD)', 'Monthly qx (CP)']
+                                      'Monthly qx (CI)', 'Monthly qx (TPD)', 'Monthly qx (CP)','Term Life (Benefit)', 'ND (Benefit)']
 
                 # Kolom berformat 0 atau 1 (seperti Mature)
                 cols_to_format_zero_one = ['Monthly qx (Mature)']
@@ -111,6 +112,15 @@ if uploaded_file is not None:
                 # Kolom berformat 6 desimal (Rate & Decrement)
                 cols_to_format_decimal = ['Survive beginning', 'Term Life', 'Lapse', 'Mature', 'Survive ending', 'ND', 
                                           'Term Life Joint', 'ND Joint', 'PA', 'CI', 'TPD', 'CP',]
+
+                # Fungsi kustom untuk format angka ribuan dengan titik (.) ala Indonesia
+                def format_idr_thousand(val):
+                    if pd.isna(val):
+                        return "-"
+                    try:
+                        return f"{int(val):,}".replace(",", ".")
+                    except:
+                        return val
                 
                 styler = df.style.set_properties(
                     subset=['Monthly qx (Lapse)'], 
@@ -120,7 +130,7 @@ if uploaded_file is not None:
                     "{:.6f}", subset=['Monthly qx (Lapse)']
                 ).format(
                     # Format tanpa desimal (integer) untuk kolom nominal uang
-                    "{:.0f}", subset=[c for c in cols_to_format_int if c in df.columns]
+                    format_idr_thousand, subset=[c for c in cols_to_format_int if c in df.columns]
                 ).format(
                     # Format integer biasa untuk kolom Mature (0 atau 1)
                     "{:.0f}", subset=[c for c in cols_to_format_zero_one if c in df.columns]
