@@ -548,6 +548,14 @@ def generate_cashflow_projection2(df_header, df_detail, pad_expense=0.0, monthly
 
         term_life_benefit_list.append(term_life_benefit_val)
         nd_benefit_list.append(nd_benefit_val)
+        nd_benefit_list.append(joint_term_life_benefit_val)
+
+        nd_benefit_list.append(joint_nd_benefit_val)
+        nd_benefit_list.append(pa_benefit_val)
+        nd_benefit_list.append(pv_death_before_pv_benefit_val)
+        nd_benefit_list.append(ci_benefit_val)
+        nd_benefit_list.append(tpd_benefit_val)
+        nd_benefit_list.append(cp_benefit_val)
 
     # Masukkan ke kolom DataFrame
     df['Survive_Beginning'] = survive_beg_list
@@ -619,3 +627,42 @@ def generate_cashflow_projection2(df_header, df_detail, pad_expense=0.0, monthly
     })
     
     return projection
+
+def get_discount_rate_ibpa(row, df_ibpa):
+    try:
+        eff_date = pd.to_datetime(row.get('Effective'))
+        pol_term_y = int(float(row.get('Pol_Term_Y', 3)))
+        
+        # 1. Konversi kolom tenor ke numerik, lalu ke integer untuk membuang desimal (.0)
+        # pd.to_numeric(..., errors='coerce') menangani jika ada data kotor
+        col_tenor_numeric = pd.to_numeric(df_ibpa.iloc[:, 0], errors='coerce').fillna(0).astype(int)
+        
+        # 2. Cari baris di mana kolom tenor (integer) == pol_term_y
+        row_match = df_ibpa[col_tenor_numeric == pol_term_y]
+        
+        if row_match.empty:
+            print(f"DEBUG: Tenor {pol_term_y} tidak ditemukan! Data kolom tenor: {col_tenor_numeric.tolist()}")
+            return 0.0
+
+        # 3. Penentuan Kolom (Logika Lookup Tahun)
+        lookup_year = max(eff_date.year, 2011) if eff_date.year <= 2023 else eff_date.year
+        
+        # Cari kolom yang mengandung tahun tersebut
+        target_col = next((col for col in df_ibpa.columns if str(lookup_year) in str(col)), None)
+        
+        if target_col is None:
+            return 0.0
+        
+        # 4. Ambil rate
+        rate = row_match.iloc[0][target_col]
+        rate_val = float(rate)
+        
+        # Jika nilai dalam format persentase (misal 5.37), konversi ke desimal
+        if rate_val > 1:
+            rate_val = rate_val / 100
+            
+        return rate_val
+        
+    except Exception as e:
+        print(f"DEBUG Error get_discount_rate_ibpa: {e}")
+        return 0.0

@@ -1,6 +1,6 @@
 import streamlit as st
 from src.data_loader import load_psak117_data
-from src.calculator import calculate_bel, calculate_ra_csm, generate_movement, generate_cashflow_projection, generate_cashflow_projection2
+from src.calculator import calculate_bel, calculate_ra_csm, generate_movement, get_discount_rate_ibpa, generate_cashflow_projection2
 from src.utils import format_idr, format_date_columns
 import pandas as pd
 
@@ -24,6 +24,8 @@ pad_lapse_input = st.sidebar.number_input("PAD Lapse (%)", min_value=0.0, max_va
 pad_expense_input = st.sidebar.number_input("PAD Expense (%)", min_value=0.0, max_value=100.0, value=0.0) / 100
 monthly_inflation_input = st.sidebar.number_input("Inflasi Bulanan (%)", value=0.21) / 100 # Default 0.2% sesuai contoh 1.002
 
+st.sidebar.subheader("Discount Rate (Tingkat Diskonto)")
+
 if uploaded_file is not None:
     with st.spinner("Memotong dan memisahkan sheet secara vertikal & blok..."):
         data_bundle = load_psak117_data(uploaded_file)
@@ -43,6 +45,32 @@ if uploaded_file is not None:
             "🛡️ Saldo RA & CSM", 
             "🔄 Liability Movement"
         ])
+
+        # 1. Hitung Discount Rate berdasarkan baris pertama data input (asumsi untuk seluruh polis)
+        # Kita ambil baris pertama dari df_detail sebagai referensi untuk input global
+        first_row = df_header.iloc[0]
+        discount_rate_year = get_discount_rate_ibpa(first_row, data_bundle["asumsi_ibpa"])
+        discount_rate_monthly = (1 + discount_rate_year) ** (1 / 12) - 1
+        # print(f"FIRST ROW: {first_row}")
+        print(f"DISCOUNT RATE YEAR: {discount_rate_year}")
+        # print(f"DISCOUNT RATE PER MONTH: {discount_rate_monthly}")
+
+        # 2. Tampilkan sebagai read-only input
+        col1, col2 = st.columns(2)
+        with col1:
+            st.sidebar.text_input(
+                "Discount Rate (Year)", 
+                value=f"{discount_rate_year:.2%}", 
+                disabled=True, 
+                help="Diambil otomatis dari Rate IBPA"
+            )
+        with col2:
+            st.sidebar.text_input(
+                "Discount Rate (Monthly)", 
+                value=f"{discount_rate_monthly:.4%}", 
+                disabled=True, 
+                help="Dihitung dari Discount Rate Year"
+        )
         
         with tab_input:
             st.subheader("1. Data Input - Header (Bagian Atas)")
@@ -64,9 +92,37 @@ if uploaded_file is not None:
             # Memecah tampilan menjadi beberapa kotak drop-down
             with st.expander("Tabel Mortalita (TMI)", expanded=True):
                 st.dataframe(data_bundle["asumsi_tmi"], use_container_width=True)
+
+            def format_ibpa_table(df_ibpa):
+                """
+                Memformat tabel Rate IBPA:
+                - Kolom pertama (Tenor) dibiarkan tampil normal (misal: 0.08, 1, 2, dst.)
+                - Kolom rate di sebelah kanannya diformat menjadi persentase (%)
+                """
+                # 1. Identifikasi nama kolom pertama (biasanya 'Tenor' atau kolom pertama dataframe)
+                col_tenor = df_ibpa.columns[0]
+                
+                # 2. Ambil sisa kolom rate di sebelah kanan
+                cols_to_percentage = [col for col in df_ibpa.columns if col != col_tenor]
+                
+                # 3. Buat fungsi khusus untuk menampilkan kolom tenor apa adanya (agar nilai 0.08 tidak berubah)
+                def format_tenor(val):
+                    return str(val) if pd.notnotl(val) else ""
+
+                styler = df_ibpa.style.format(
+                    # Format persentase hanya untuk kolom-kolom rate
+                    "{:.2%}", subset=cols_to_percentage
+                ).format(
+                    # Pastikan kolom tenor mempertahankan nilai aslinya tanpa format pengali persen
+                    lambda x: f"{x:g}" if isinstance(x, (int, float)) else str(x), 
+                    subset=[col_tenor]
+                )
+                return styler
+
+            ibpa_styled = format_ibpa_table(data_bundle["asumsi_ibpa"])
                     
             with st.expander("Rate IBPA"):
-                st.dataframe(data_bundle["asumsi_ibpa"], use_container_width=True)
+                st.dataframe(ibpa_styled, use_container_width=True)
 
             with st.expander("Rate Inflasi"):
                 df_inflasi_clean = format_date_columns(data_bundle["asumsi_inflasi"].copy())
