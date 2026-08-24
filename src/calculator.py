@@ -548,14 +548,14 @@ def generate_cashflow_projection2(df_header, df_detail, pad_expense=0.0, monthly
 
         term_life_benefit_list.append(term_life_benefit_val)
         nd_benefit_list.append(nd_benefit_val)
-        nd_benefit_list.append(joint_term_life_benefit_val)
+        # nd_benefit_list.append(joint_term_life_benefit_val)
 
-        nd_benefit_list.append(joint_nd_benefit_val)
-        nd_benefit_list.append(pa_benefit_val)
-        nd_benefit_list.append(pv_death_before_pv_benefit_val)
-        nd_benefit_list.append(ci_benefit_val)
-        nd_benefit_list.append(tpd_benefit_val)
-        nd_benefit_list.append(cp_benefit_val)
+        # nd_benefit_list.append(joint_nd_benefit_val)
+        # nd_benefit_list.append(pa_benefit_val)
+        # nd_benefit_list.append(pv_death_before_pv_benefit_val)
+        # nd_benefit_list.append(ci_benefit_val)
+        # nd_benefit_list.append(tpd_benefit_val)
+        # nd_benefit_list.append(cp_benefit_val)
 
     # Masukkan ke kolom DataFrame
     df['Survive_Beginning'] = survive_beg_list
