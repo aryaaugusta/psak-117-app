@@ -202,7 +202,7 @@ def load_psak117_data(uploaded_file):
             "asumsi_lapse_y": asumsi_lapse_y,
             "asumsi_lapse_m2": asumsi_lapse_m2,
             "status": True,
-            "message": "Sukses mengekstrak tabel data & memisahkan blok tabel asumsi!"
+            "message": "Sukses mengekstrak tabel data & memisahkan tabel asumsi!"
         }
         
     except Exception as e:
