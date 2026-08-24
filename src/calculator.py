@@ -473,6 +473,13 @@ def generate_cashflow_projection2(df_header, df_detail, pad_expense=0.0, monthly
     # Inisialisasi list penampung
     term_life_benefit_list = []
     nd_benefit_list = []
+    joint_term_life_benefit_list = []
+    joint_nd_benefit_list = []
+    pa_benefit_list = []
+    pv_death_before_pv_benefit_list = []
+    ci_benefit_list = []
+    tpd_benefit_list = []
+    cp_benefit_list = []
 
     for idx, row in df.iterrows():
         policy_id = row.get('Policy_ID', row.get('A_PolicyNo', 'default_policy'))
@@ -548,14 +555,13 @@ def generate_cashflow_projection2(df_header, df_detail, pad_expense=0.0, monthly
 
         term_life_benefit_list.append(term_life_benefit_val)
         nd_benefit_list.append(nd_benefit_val)
-        # nd_benefit_list.append(joint_term_life_benefit_val)
-
-        # nd_benefit_list.append(joint_nd_benefit_val)
-        # nd_benefit_list.append(pa_benefit_val)
-        # nd_benefit_list.append(pv_death_before_pv_benefit_val)
-        # nd_benefit_list.append(ci_benefit_val)
-        # nd_benefit_list.append(tpd_benefit_val)
-        # nd_benefit_list.append(cp_benefit_val)
+        joint_term_life_benefit_list.append(joint_term_life_benefit_val)
+        joint_nd_benefit_list.append(joint_nd_benefit_val)
+        pa_benefit_list.append(pa_benefit_val)
+        pv_death_before_pv_benefit_list.append(pv_death_before_pv_benefit_val)
+        ci_benefit_list.append(ci_benefit_val)
+        tpd_benefit_list.append(tpd_benefit_val)
+        cp_benefit_list.append(cp_benefit_val)
 
     # Masukkan ke kolom DataFrame
     df['Survive_Beginning'] = survive_beg_list
@@ -572,18 +578,18 @@ def generate_cashflow_projection2(df_header, df_detail, pad_expense=0.0, monthly
     df['CP'] = cp_list
     df['Term_Life_Benefit'] = term_life_benefit_list
     df['ND_Benefit'] = nd_benefit_list
-    df['Joint_Term_Life_Benefit'] = base_joint_term_life_benefit
-    df['Joint_ND_Benefit'] = base_joint_nd_benefit
-    df['PA_Benefit'] = base_pa_benefit
-    df['PV_Death_Before_PV_Benefit'] = base_pv_death_before_pv_benefit
-    df['CI_Benefit'] = base_ci_benefit
-    df['TPD_Benefit'] = base_tpd_benefit
-    df['CP_Benefit'] = base_cp_benefit
+    df['Joint_Term_Life_Benefit'] = joint_term_life_benefit_list
+    df['Joint_ND_Benefit'] = joint_nd_benefit_list
+    df['PA_Benefit'] = pa_benefit_list
+    df['PV_Death_Before_PV_Benefit'] = pv_death_before_pv_benefit_list
+    df['CI_Benefit'] = ci_benefit_list
+    df['TPD_Benefit'] = tpd_benefit_list
+    df['CP_Benefit'] = cp_benefit_list
 
     # 6. Susun DataFrame Hasil Proyeksi
     projection = pd.DataFrame({
         "Tahun Polis": df['A_Policy_Year'],
-        "Bulan ke-": bulan_ke,
+        "Bulan ke-": df['Bulan_Ke'],
         "Premi": df['Premi'],
         "Komisi": df['Komisi'],
         "Biaya Akuisisi": df['Biaya_Akuisisi'],
