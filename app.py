@@ -55,6 +55,10 @@ if uploaded_file is not None:
         print(f"DISCOUNT RATE YEAR: {discount_rate_year}")
         # print(f"DISCOUNT RATE PER MONTH: {discount_rate_monthly}")
 
+        # 2. Perhitungan Suku Bunga Bonus (80% dari discount rate)
+        bonus_rate_year = discount_rate_year * 0.80
+        bonus_rate_monthly = (1 + bonus_rate_year) ** (1 / 12) - 1
+
         # 2. Tampilkan sebagai read-only input
         col1, col2 = st.columns(2)
         with col1:
@@ -70,6 +74,26 @@ if uploaded_file is not None:
                 value=f"{discount_rate_monthly:.4%}", 
                 disabled=True, 
                 help="Dihitung dari Discount Rate Year"
+        )
+
+        st.sidebar.markdown("---")
+        st.sidebar.subheader("Bonus Discount Rate (Tingkat Diskonto Bonus)")
+
+        # 2. Tampilkan sebagai read-only input
+        col3, col4 = st.sidebar.columns(2)
+        with col3:
+            st.sidebar.text_input(
+                "Discount Rate Bonus (Year)", 
+                value=f"{bonus_rate_year:.2%}", 
+                disabled=True, 
+                help=f"Dihitung 80% dari Current Discount Rate"
+            )
+        with col4:
+            st.sidebar.text_input(
+                "Discount Rate Bonus(Monthly)", 
+                value=f"{bonus_rate_monthly:.4%}", 
+                disabled=True, 
+                help="Dihitung dari Suku Bunga Bonus Tahunan"
         )
         
         with tab_input:
@@ -160,7 +184,9 @@ if uploaded_file is not None:
                 # Sesuaikan dengan nama kolom yang ada di dataframe Anda
                 cols_to_format_int = ['% Premi (PAD)', 'Fixed Cost', 'Fixed Cost (Dihitung CARE)', 
                                       'Monthly qx (ND)', 'Monthly qx (Term Life Joint)', 'Monthly qx (ND Joint)', 'Monthly qx (PA)',
-                                      'Monthly qx (CI)', 'Monthly qx (TPD)', 'Monthly qx (CP)','Term Life (Benefit)', 'ND (Benefit)']
+                                      'Monthly qx (CI)', 'Monthly qx (TPD)', 'Monthly qx (CP)','Term Life (BD - Benefit)', 'ND (Benefit)', 
+                                      'Akumulasi Bonus (BD - Benefit)',"Term Life (After)", "ND (After)", "Joint Term Life (After)", "Joint ND (After)",
+                                      'PA (After)', 'PV Death (After)', 'CI (After)', 'TPD (After)', 'CP (After)', 'Surrender (SB - Benefit)']
 
                 # Kolom berformat 0 atau 1 (seperti Mature)
                 cols_to_format_zero_one = ['Monthly qx (Mature)']
@@ -213,7 +239,9 @@ if uploaded_file is not None:
                 df_tmi=data_bundle["asumsi_tmi"],
                 asumsi_lapse_monthly=data_bundle["asumsi_lapse_m2"],
                 pad_mortality=pad_mortality_input,
-                pad_lapse=pad_lapse_input
+                pad_lapse=pad_lapse_input,
+                bonus_rate_monthly=bonus_rate_monthly,
+                discount_rate_monthly=discount_rate_monthly
             )
 
             # Menampilkan tabel

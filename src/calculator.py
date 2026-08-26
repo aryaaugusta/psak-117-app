@@ -210,7 +210,7 @@ def generate_cashflow_projection2(df_header, df_detail, pad_expense=0.0, monthly
                                   asumsi_inflasi=None, df_tmi=None, pad_mortality=0.0, 
                                   total_nd_global=0.0, total_joint_term_life_global=0.0, total_nd_joint_global=0.0,
                                   total_pa_global=0.0, total_ci_global=0.0, total_tpd_global=0.0, total_cp_global=0.0,
-                                  asumsi_lapse_monthly=None, pad_lapse=0.0):
+                                  asumsi_lapse_monthly=None, pad_lapse=0.0, bonus_rate_monthly=0.0, discount_rate_monthly=0.0):
     # 1. Gabungkan (Merge) df_detail dan df_header agar panjang barisnya konsisten
     # Pastikan ada kolom kunci yang sama, misal 'Policy_ID' atau 'A_PolicyNo'. 
     # Jika struktur baris sudah sejajar persis, bisa langsung di-assign.
@@ -455,6 +455,7 @@ def generate_cashflow_projection2(df_header, df_detail, pad_expense=0.0, monthly
     tpd_list = []
     cp_list = []
     survive_end_list = []
+    akumulasi_bonus_list = []
 
     # Dictionary untuk melacak survive ending per polis (jika ada banyak polis)
     prev_survive_end_dict = {}
@@ -494,6 +495,21 @@ def generate_cashflow_projection2(df_header, df_detail, pad_expense=0.0, monthly
     tahapan_list = []
     maturity_list = []
 
+    # Inisialisasi list penampung akumulasi bonus
+    akumulasi_bonus_list = []
+    prev_akumulasi_bonus_dict = {} # Melacak akumulasi bonus per polis
+
+    # Inisialisasi list penampung After Decrement Benefits
+    after_term_life_list = []
+    after_nd_list = []
+    after_joint_term_life_list = []
+    after_joint_nd_list = []
+    after_pa_list = []
+    after_pv_death_list = []
+    after_ci_list = []
+    after_tpd_list = []
+    after_cp_list = []
+
     for idx, row in df.iterrows():
         policy_id = row.get('Policy_ID', row.get('A_PolicyNo', 'default_policy'))
         bulan_ke = row.get('Bulan_Ke', 1)
@@ -527,6 +543,7 @@ def generate_cashflow_projection2(df_header, df_detail, pad_expense=0.0, monthly
         ci_val = q_ci * survive_beg
         tpd_val = q_tpd * survive_beg
         cp_val = q_cp * survive_beg
+        
         # pv_death_val = pv_death_before_pv_benefit_val * survive_beg  # Jika ada PV Death Before PV Benefit
 
         # Total seluruh decrement pada bulan tersebut
@@ -589,6 +606,144 @@ def generate_cashflow_projection2(df_header, df_detail, pad_expense=0.0, monthly
         tahapan_list.append(tahapan_benefit_val)
         maturity_list.append(maturity_benefit_val)
 
+        # 1. Ambil nilai bonus bulan berjalan
+        bonus_val = base_bonus_benefit.iloc[idx]
+
+        # 2. Ambil nilai akumulasi bonus bulan sebelumnya untuk polis yang sama
+        prev_akrual = prev_akumulasi_bonus_dict.get(policy_id, 0.0)
+
+        # 3. Rumus Akumulasi Bonus: (Bonus bulan berjalan + Akumulasi sebelumnya) * (1 + suku_bunga_bonus_monthly)
+        # Jika bulan ke-1 atau awal, akumulasi sebelumnya adalah 0
+        if bulan_ke == 1 or policy_id not in prev_akumulasi_bonus_dict:
+            akumulasi_bonus_val = bonus_val * (1 + bonus_rate_monthly)
+        else:
+            akumulasi_bonus_val = (bonus_val + prev_akrual) * (1 + bonus_rate_monthly)
+
+        # Simpan untuk iterasi bulan berikutnya
+        prev_akumulasi_bonus_dict[policy_id] = akumulasi_bonus_val
+
+        # Masukkan ke list
+        akumulasi_bonus_list.append(akumulasi_bonus_val)
+
+        # Ambil nilai Benefit Before Decrement & Akumulasi Bonus untuk baris ini
+        b_term = term_life_benefit_list[idx]
+        b_nd = nd_benefit_list[idx]
+        b_joint_term = joint_term_life_benefit_list[idx]
+        b_joint_nd = joint_nd_benefit_list[idx]
+        akr_bonus = akumulasi_bonus_list[idx]
+
+        # Ambil nilai decrement yang sesuai
+        decr_term = term_life_list[idx]       # term life di bagian decrement (q_term * survive_beg)
+        decr_nd = nd_list[idx]                 # ND di decrement
+        decr_joint_term = term_life_joint_list[idx] # term life joint di decrement
+        decr_joint_nd = nd_joint_list[idx]     # ND joint di decrement
+
+        # --- RUMUS AFTER DECREMENT ---
+        # 1. Term Life After Decrement: =IF(term_life_before=0, 0, (term_life_before + akumulasi_bonus) * decr_term)
+        if b_term == 0:
+            val_after_term = 0.0
+        else:
+            val_after_term = (b_term + akr_bonus) * decr_term
+
+        # 2. ND After Decrement: =IF(nd_before=0, 0, nd_before * decr_nd)
+        if b_nd == 0:
+            val_after_nd = 0.0
+        else:
+            val_after_nd = b_nd * decr_nd
+
+        # 3. Joint Term Life After Decrement: =joint_term_before * decr_joint_term
+        val_after_joint_term = b_joint_term * decr_joint_term
+
+        # 4. Joint ND After Decrement: =joint_nd_before * decr_joint_nd
+        val_after_joint_nd = b_joint_nd * decr_joint_nd
+
+        after_term_life_list.append(val_after_term)
+        after_nd_list.append(val_after_nd)
+        after_joint_term_life_list.append(val_after_joint_term)
+        after_joint_nd_list.append(val_after_joint_nd)
+
+        # # 1. Pastikan basis nilai untuk PV Death Before Decr sudah siap dalam bentuk list sepanjang df
+        # if 'pv_death_before_pv_benefit_list' in locals() and len(pv_death_before_pv_benefit_list) == len(df):
+        #     base_pv_death_benefit = pv_death_before_pv_benefit_list
+        # else:
+        #     # Fallback aman jika list sebelumnya belum ada: hitung langsung dari benefit Term Life + Akumulasi Bonus
+        #     base_pv_death_benefit = []
+        #     for i in range(len(df)):
+        #         t_val = term_life_benefit_list[i] if i < len(term_life_benefit_list) else 0.0
+        #         a_val = akumulasi_bonus_list[i] if i < len(akumulasi_bonus_list) else 0.0
+        #         base_pv_death_benefit.append(t_val + a_val)
+
+        # # 2. Hitung kolom baru: "PV Death" (Before Decr) secara BACKWARD secara aman
+        # pv_death_before_decr_list = [0.0] * len(df)
+        # running_pv_decr = 0.0
+
+        # 1. Pastikan basis PV Death Before PV yang masuk ke backward loop bernilai 0 jika memang tidak ada
+        # Jika kolom 'PV_Death_Before_PV_Calculated' atau sumber aslinya kosong/tidak aktif, set 0.
+        if 'PV_Death_Before_PV_Benefit' in df.columns:
+            base_pv_death_bpv = df['PV_Death_Before_PV_Benefit'].tolist()
+        else:
+            # Jika kolom sumbernya memang harus 0, buat list berisi angka 0 murni sepanjang baris dataframe
+            base_pv_death_bpv = [0.0] * len(df)
+
+        # 2. Hitung ulang secara backward murni
+        pv_death_before_decr_list = [0.0] * len(df)
+        running_pv_decr = 0.0
+        
+        # Iterasi mundur dari baris terakhir ke baris pertama
+        for idx in range(len(df) - 1, -1, -1):
+            current_val = base_pv_death_bpv[idx]
+            
+            if idx == len(df) - 1:
+                running_pv_decr = current_val
+            else:
+                # Hindari pembagian dengan nol jika discount rate monthly bernilai 0
+                rate_divisor = (1 + discount_rate_monthly) if discount_rate_monthly != 0 else 1.0
+                running_pv_decr = current_val + (running_pv_decr / rate_divisor)
+                
+            pv_death_before_decr_list[idx] = running_pv_decr
+
+        # Ambil nilai Before Decrement (Benefit)
+        b_pa = pa_benefit_list[idx] if 'pa_benefit_list' in locals() else 0.0
+        b_ci = ci_benefit_list[idx] if 'ci_benefit_list' in locals() else 0.0
+        b_tpd = tpd_benefit_list[idx] if 'tpd_benefit_list' in locals() else 0.0
+        b_cp = cp_benefit_list[idx] if 'cp_benefit_list' in locals() else 0.0
+        
+        # Ambil nilai PV Death (Before Decr) yang baru saja dihitung
+        b_pv_death = pv_death_before_decr_list[idx] if 'pv_death_before_decr_list' in locals() else 0.0
+
+        # Ambil nilai qx / decrement yang sesuai
+        decr_pa = pa_list[idx] if 'pa_list' in locals() else 0.0
+        decr_ci = ci_list[idx] if 'ci_list' in locals() else 0.0
+        decr_tpd = tpd_list[idx] if 'tpd_list' in locals() else 0.0
+        decr_cp = cp_list[idx] if 'cp_list' in locals() else 0.0
+        decr_term = term_life_list[idx] if 'term_life_list' in locals() else 0.0 # untuk PV Death After
+
+        # --- RUMUS AFTER DECREMENT TAMBAHAN ---
+        # 1. PA After: = PA Before * PA sesuai manfaat (decrement PA)
+        val_after_pa = b_pa * decr_pa
+
+        # 2. PV Death After: = PV Death Before Decr * Term Life Decrement
+        # print(f"DEBUG: PV DEATH = {b_pv_death}")
+        # print(f"DEBUG: TERM LIFE DECREMENT 1 = {decr_term}")
+        # print(f"DEBUG: TERM LIFE DECREMENT 2 = {term_life_val}")
+        val_after_pv_death = b_pv_death * decr_term
+        # print(f"DEBUG: VAL AFTER PV DEATH = {val_after_pv_death}")
+
+        # 3. CI After: = CI Before * CI sesuai manfaat (decrement CI)
+        val_after_ci = b_ci * decr_ci
+
+        # 4. TPD After: = TPD Before * TPD sesuai manfaat (decrement TPD)
+        val_after_tpd = b_tpd * decr_tpd
+
+        # 5. CP After: = CP Before * CP sesuai manfaat (decrement CP)
+        val_after_cp = b_cp * decr_cp
+
+        after_pa_list.append(val_after_pa)
+        after_pv_death_list.append(val_after_pv_death)
+        after_ci_list.append(val_after_ci)
+        after_tpd_list.append(val_after_tpd)
+        after_cp_list.append(val_after_cp)
+
     # Masukkan ke kolom DataFrame
     df['Survive_Beginning'] = survive_beg_list
     df['Term_Life_Decr'] = term_life_list
@@ -608,7 +763,7 @@ def generate_cashflow_projection2(df_header, df_detail, pad_expense=0.0, monthly
     df['Joint_ND_Benefit'] = joint_nd_benefit_list
     df['PA_Benefit'] = pa_benefit_list
     df['PV_Death_Before_PV_Benefit'] = pv_death_before_pv_benefit_list
-    # df['PV_Death_Benefit'] = pv_death_benefit_list
+    df['PV_Death_Benefit'] = pv_death_before_decr_list
     df['CI_Benefit'] = ci_benefit_list
     df['TPD_Benefit'] = tpd_benefit_list
     df['CP_Benefit'] = cp_benefit_list
@@ -616,6 +771,17 @@ def generate_cashflow_projection2(df_header, df_detail, pad_expense=0.0, monthly
     df['Surrender_Benefit'] = surrender_list
     df['Tahapan_Benefit'] = tahapan_list
     df['Maturity_Benefit'] = maturity_list
+    df['Akumulasi_Bonus'] = akumulasi_bonus_list
+
+    df['After_Term_Life'] = after_term_life_list
+    df['After_ND'] = after_nd_list
+    df['After_Joint_Term_Life'] = after_joint_term_life_list
+    df['After_Joint_ND'] = after_joint_nd_list
+    df['After_PA'] = after_pa_list
+    df['After_PV_Death'] = after_pv_death_list
+    df['After_CI'] = after_ci_list
+    df['After_TPD'] = after_tpd_list
+    df['After_CP'] = after_cp_list
 
     # 6. Susun DataFrame Hasil Proyeksi
     projection = pd.DataFrame({
@@ -659,17 +825,26 @@ def generate_cashflow_projection2(df_header, df_detail, pad_expense=0.0, monthly
         "ND Joint (BD - Benefit)": df['Joint_ND_Benefit'],
         "PA (BD - Benefit)": df['PA_Benefit'],
         "PV Death Before PV (BD - Benefit)": df['PV_Death_Before_PV_Benefit'],
-        # "PV Death (Benefit)": df['PV_Death_Benefit'],
+        "PV Death (Before Decr)": df['PV_Death_Benefit'],
         "CI (BD - Benefit)": df['CI_Benefit'],
         "TPD (BD - Benefit)": df['TPD_Benefit'],
         "CP (BD - Benefit)": df['CP_Benefit'],
         "Bonus (BD - Benefit)": df['Bonus_Benefit'],
+        "Akumulasi Bonus (BD - Benefit)": df['Akumulasi_Bonus'],
         # Kolom Survival Benefits
         "Surrender (SB - Benefit)": df['Surrender_Benefit'],
         "Tahapan (SB - Benefit)": df['Tahapan_Benefit'],
-        "Maturity (SB - Benefit)": df['Maturity_Benefit']
-        # Kolom After Decrement
-        
+        "Maturity (SB - Benefit)": df['Maturity_Benefit'],
+        # Kolom After Decrement (Benefits)
+        "Term Life (After)": df['After_Term_Life'],
+        "ND (After)": df['After_ND'],
+        "Joint Term Life (After)": df['After_Joint_Term_Life'],
+        "Joint ND (After)": df['After_Joint_ND'],
+        "PA (After)": df['After_PA'],
+        "PV Death (After)": df['After_PV_Death'],
+        "CI (After)": df['After_CI'],
+        "TPD (After)": df['After_TPD'],
+        "CP (After)": df['After_CP'],
     })
     
     return projection
