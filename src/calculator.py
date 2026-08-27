@@ -772,6 +772,102 @@ def generate_cashflow_projection2(df_header, df_detail, pad_expense=0.0, monthly
         total_future_expenses_list.append(val_total_expenses)
         future_premiums_list.append(val_future_premiums)
 
+    # ==========================================
+    # BACKWARD RECURSION UNTUK SELURUH KOLOM PV (PRESENT VALUE)
+    # ==========================================
+    n_rows = len(df)
+    rate_divisor = (1 + discount_rate_monthly) if discount_rate_monthly != 0 else 1.0
+
+    # Inisialisasi list penampung hasil PV
+    pv_benefits_list = [0.0] * n_rows
+    pv_surrender_list = [0.0] * n_rows
+    pv_komisi_list = [0.0] * n_rows
+    pv_akuisisi_list = [0.0] * n_rows
+    pv_pct_premi_list = [0.0] * n_rows
+    pv_fixed_cost_list = [0.0] * n_rows
+    pv_exp_1_list = [0.0] * n_rows
+    pv_exp_2_list = [0.0] * n_rows
+    pv_premiums_list = [0.0] * n_rows
+    bel_list = [0.0] * n_rows
+    bel_per_unit_list = [0.0] * n_rows
+
+    # Variabel pelacak akumulasi mundur (running PV)
+    run_ben = 0.0
+    run_sur = 0.0
+    run_kom = 0.0
+    run_aku = 0.0
+    run_pct = 0.0
+    run_fix = 0.0
+    run_ex1 = 0.0
+    run_ex2 = 0.0
+    run_pre = 0.0
+
+    # Iterasi mundur dari baris terakhir ke baris pertama (index n_rows-1 turun ke 0)
+    for idx in range(n_rows - 1, -1, -1):
+        # Ambil nilai baris berjalan
+        curr_ben = total_future_benefits_list[idx] if idx < len(total_future_benefits_list) else 0.0
+        curr_sur = surrender_refund_list[idx] if idx < len(surrender_refund_list) else 0.0
+        curr_kom = after_komisi_list[idx] if idx < len(after_komisi_list) else 0.0
+        curr_aku = after_biaya_akuisisi_list[idx] if idx < len(after_biaya_akuisisi_list) else 0.0
+        curr_pct = after_pct_premi_list[idx] if idx < len(after_pct_premi_list) else 0.0
+        curr_fix = after_fixed_cost_list[idx] if idx < len(after_fixed_cost_list) else 0.0
+        curr_ex1 = total_future_expenses_1_list[idx] if idx < len(total_future_expenses_1_list) else 0.0
+        curr_ex2 = total_future_expenses_list[idx] if idx < len(total_future_expenses_list) else 0.0
+        curr_pre = future_premiums_list[idx] if idx < len(future_premiums_list) else 0.0
+
+        if idx == n_rows - 1:
+            run_ben = curr_ben
+            run_sur = curr_sur
+            run_kom = curr_kom
+            run_aku = curr_aku
+            run_pct = curr_pct
+            run_fix = curr_fix
+            run_ex1 = curr_ex1
+            run_ex2 = curr_ex2
+            run_pre = curr_pre
+        else:
+            run_ben = (curr_ben + run_ben) / rate_divisor
+            run_sur = (curr_sur + run_sur) / rate_divisor
+            run_kom = curr_kom + (run_kom / rate_divisor)
+            run_aku = curr_aku + (run_aku / rate_divisor)
+            run_pct = curr_pct + (run_pct / rate_divisor)
+            run_fix = curr_fix + (run_fix / rate_divisor)
+            run_ex1 = curr_ex1 + (run_ex1 / rate_divisor)
+            run_ex2 = curr_ex2 + (run_ex2 / rate_divisor)
+            run_pre = curr_pre + (run_pre / rate_divisor)
+
+        print(f"DEBUG: KOMISI = {curr_kom} | PV FUTURE KOMISI BERIKUTNYA = {run_kom}")
+        # print(f"DEBUG: PV FUTURE KOMISI BERIKUTNYA = {run_kom}")
+        # print(f"DEBUG: DISC RATE PER MONTH = {rate_divisor}")
+
+        pv_benefits_list[idx] = run_ben
+        pv_surrender_list[idx] = run_sur
+        pv_komisi_list[idx] = run_kom
+        pv_akuisisi_list[idx] = run_aku
+        pv_pct_premi_list[idx] = run_pct
+        pv_fixed_cost_list[idx] = run_fix
+        pv_exp_1_list[idx] = run_ex1
+        pv_exp_2_list[idx] = run_ex2
+        pv_premiums_list[idx] = run_pre
+
+        # --- RUMUS BEL ---
+        # BEL = PV Future Benefits (Claim) + PV Surrender (Refund) + PV Future Expenses 2 - PV Future Premiums
+        val_bel = run_ben + run_sur + run_ex2 - run_pre
+        bel_list[idx] = val_bel
+
+        # --- RUMUS BEL PER UNIT ---
+        # =IF(AND(bulan_ke=0; bulan_ke_berikutnya=0); 0; BEL / survive_beginning_decrement)
+        b_ke = float(df['Bulan_Ke'].iloc[idx]) if 'Bulan_Ke' in df.columns else 1.0
+        next_b_ke = float(df['Bulan_Ke'].iloc[idx + 1]) if idx + 1 < n_rows else 0.0
+        surv_beg = survive_beg_list[idx] if idx < len(survive_beg_list) else 1.0
+
+        if b_ke == 0 and next_b_ke == 0:
+            val_bel_unit = 0.0
+        else:
+            val_bel_unit = val_bel / surv_beg if surv_beg != 0 else 0.0
+
+        bel_per_unit_list[idx] = val_bel_unit
+
     # Masukkan ke kolom DataFrame
     df['Survive_Beginning'] = survive_beg_list
     df['Term_Life_Decr'] = term_life_list
@@ -824,6 +920,18 @@ def generate_cashflow_projection2(df_header, df_detail, pad_expense=0.0, monthly
     df['Total_Future_Expenses_1'] = total_future_expenses_1_list
     df['Total_Future_Expenses_2'] = total_future_expenses_list
     df['Future_Premiums'] = future_premiums_list
+
+    df['PV_Future_Benefits'] = pv_benefits_list
+    df['PV_Surrender'] = pv_surrender_list
+    df['PV_Future_Komisi'] = pv_komisi_list
+    df['PV_Future_Akuisisi'] = pv_akuisisi_list
+    df['PV_Future_Pct_Premi'] = pv_pct_premi_list
+    df['PV_Future_Fixed_Cost'] = pv_fixed_cost_list
+    df['PV_Future_Exp_1'] = pv_exp_1_list
+    df['PV_Future_Exp_2'] = pv_exp_2_list
+    df['PV_Future_Premiums'] = pv_premiums_list
+    df['BEL'] = bel_list
+    df['BEL_Per_Unit'] = bel_per_unit_list
 
     # 6. Susun DataFrame Hasil Proyeksi
     projection = pd.DataFrame({
@@ -901,6 +1009,17 @@ def generate_cashflow_projection2(df_header, df_detail, pad_expense=0.0, monthly
         "Total Future Expenses 1": df['Total_Future_Expenses_1'],
         "Total Future Expenses 2": df['Total_Future_Expenses_2'],
         "Future Premiums": df['Future_Premiums'],
+        "PV Future Benefits (Claim)": df['PV_Future_Benefits'],
+        "PV Surrender (Refund)": df['PV_Surrender'],
+        "PV Future Komisi": df['PV_Future_Komisi'],
+        "PV Future Biaya Akuisisi (Other Expense)": df['PV_Future_Akuisisi'],
+        "PV Future % Premi": df['PV_Future_Pct_Premi'],
+        "PV Future Fixed Cost": df['PV_Future_Fixed_Cost'],
+        "PV Future Expenses 1": df['PV_Future_Exp_1'],
+        "PV Future Expenses 2": df['PV_Future_Exp_2'],
+        "PV Future Premiums": df['PV_Future_Premiums'],
+        "BEL": df['BEL'],
+        "BEL Per Unit": df['BEL_Per_Unit']
     })
     
     return projection

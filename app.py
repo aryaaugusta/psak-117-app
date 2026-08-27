@@ -182,13 +182,15 @@ if uploaded_file is not None:
                 """
                 # 1. Tentukan daftar kolom mata uang / nominal yang ingin ditampilkan tanpa desimal (.000000)
                 # Sesuaikan dengan nama kolom yang ada di dataframe Anda
-                cols_to_format_int = ['% Premi (PAD)', 'Fixed Cost', 'Fixed Cost (Dihitung CARE)', 
+                cols_to_format_int = ['Premi', 'Komisi', 'Biaya Akuisisi', '% Premi (PAD)', 'Fixed Cost', 'Fixed Cost (Dihitung CARE)', 
                                       'Monthly qx (ND)', 'Monthly qx (Term Life Joint)', 'Monthly qx (ND Joint)', 'Monthly qx (PA)',
                                       'Monthly qx (CI)', 'Monthly qx (TPD)', 'Monthly qx (CP)','Term Life (BD - Benefit)', 'ND (Benefit)', 
                                       'Akumulasi Bonus (BD - Benefit)',"Term Life (After)", "ND (After)", "Joint Term Life (After)", "Joint ND (After)",
                                       'PA (After)', 'PV Death (After)', 'CI (After)', 'TPD (After)', 'CP (After)', 'Surrender (SB - Benefit)',
                                       "Surrender (After)", "Tahapan (After)", "Maturity (After)", "Total Future Benefits (Claim)", "Surrender (Refund)",
-                                      "Komisi (After)", "Biaya Akuisisi (After)", "% Premi (After)", "Fixed Cost (After)", "Total Future Expenses 1", "Total Future Expenses 2", "Future Premiums"]
+                                      "Komisi (After)", "Biaya Akuisisi (After)", "% Premi (After)", "Fixed Cost (After)", "Total Future Expenses 1", "Total Future Expenses 2", "Future Premiums",
+                                      "PV Future Benefits (Claim)","PV Surrender (Refund)", "PV Future Komisi", "PV Future Biaya Akuisisi (Other Expense)", "PV Future % Premi", "PV Future Fixed Cost", "PV Future Expenses 1", "PV Future Expenses 2", "PV Future Premiums",
+                                      "BEL", "BEL Per Unit"]
 
                 # Kolom berformat 0 atau 1 (seperti Mature)
                 cols_to_format_zero_one = ['Monthly qx (Mature)']
