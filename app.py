@@ -24,8 +24,6 @@ pad_lapse_input = st.sidebar.number_input("PAD Lapse (%)", min_value=0.0, max_va
 pad_expense_input = st.sidebar.number_input("PAD Expense (%)", min_value=0.0, max_value=100.0, value=0.0) / 100
 monthly_inflation_input = st.sidebar.number_input("Inflasi Bulanan (%)", value=0.21) / 100 # Default 0.2% sesuai contoh 1.002
 
-st.sidebar.subheader("Discount Rate (Tingkat Diskonto)")
-
 if uploaded_file is not None:
     with st.spinner("Memotong dan memisahkan sheet secara vertikal & blok..."):
         data_bundle = load_psak117_data(uploaded_file)
@@ -59,6 +57,8 @@ if uploaded_file is not None:
         bonus_rate_year = discount_rate_year * 0.80
         bonus_rate_monthly = (1 + bonus_rate_year) ** (1 / 12) - 1
 
+        st.sidebar.subheader("Discount Rate (Tingkat Diskonto)")
+
         # 2. Tampilkan sebagai read-only input
         col1, col2 = st.columns(2)
         with col1:
@@ -76,7 +76,7 @@ if uploaded_file is not None:
                 help="Dihitung dari Discount Rate Year"
         )
 
-        st.sidebar.markdown("---")
+        # st.sidebar.markdown("---")
         st.sidebar.subheader("Bonus Discount Rate (Tingkat Diskonto Bonus)")
 
         # 2. Tampilkan sebagai read-only input
@@ -186,7 +186,9 @@ if uploaded_file is not None:
                                       'Monthly qx (ND)', 'Monthly qx (Term Life Joint)', 'Monthly qx (ND Joint)', 'Monthly qx (PA)',
                                       'Monthly qx (CI)', 'Monthly qx (TPD)', 'Monthly qx (CP)','Term Life (BD - Benefit)', 'ND (Benefit)', 
                                       'Akumulasi Bonus (BD - Benefit)',"Term Life (After)", "ND (After)", "Joint Term Life (After)", "Joint ND (After)",
-                                      'PA (After)', 'PV Death (After)', 'CI (After)', 'TPD (After)', 'CP (After)', 'Surrender (SB - Benefit)']
+                                      'PA (After)', 'PV Death (After)', 'CI (After)', 'TPD (After)', 'CP (After)', 'Surrender (SB - Benefit)',
+                                      "Surrender (After)", "Tahapan (After)", "Maturity (After)", "Total Future Benefits (Claim)", "Surrender (Refund)",
+                                      "Komisi (After)", "Biaya Akuisisi (After)", "% Premi (After)", "Fixed Cost (After)", "Total Future Expenses 1", "Total Future Expenses 2", "Future Premiums"]
 
                 # Kolom berformat 0 atau 1 (seperti Mature)
                 cols_to_format_zero_one = ['Monthly qx (Mature)']
