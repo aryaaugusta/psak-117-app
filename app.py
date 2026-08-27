@@ -190,7 +190,7 @@ if uploaded_file is not None:
                                       "Surrender (After)", "Tahapan (After)", "Maturity (After)", "Total Future Benefits (Claim)", "Surrender (Refund)",
                                       "Komisi (After)", "Biaya Akuisisi (After)", "% Premi (After)", "Fixed Cost (After)", "Total Future Expenses 1", "Total Future Expenses 2", "Future Premiums",
                                       "PV Future Benefits (Claim)","PV Surrender (Refund)", "PV Future Komisi", "PV Future Biaya Akuisisi (Other Expense)", "PV Future % Premi", "PV Future Fixed Cost", "PV Future Expenses 1", "PV Future Expenses 2", "PV Future Premiums",
-                                      "BEL", "BEL Per Unit"]
+                                      "BEL", "BEL Per Unit", "BEL Beginning", "BEL Premium", "BEL Commission", "BEL Expense", "BEL Other Expense", "BEL Claim", "BEL Surrender", "Unwind", "Inc (Dec) of BEL", "BEL Ending", "Selisih"]
 
                 # Kolom berformat 0 atau 1 (seperti Mature)
                 cols_to_format_zero_one = ['Monthly qx (Mature)']

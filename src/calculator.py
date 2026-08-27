@@ -836,7 +836,7 @@ def generate_cashflow_projection2(df_header, df_detail, pad_expense=0.0, monthly
             run_ex2 = curr_ex2 + (run_ex2 / rate_divisor)
             run_pre = curr_pre + (run_pre / rate_divisor)
 
-        print(f"DEBUG: KOMISI = {curr_kom} | PV FUTURE KOMISI BERIKUTNYA = {run_kom}")
+        # print(f"DEBUG: KOMISI = {curr_kom} | PV FUTURE KOMISI BERIKUTNYA = {run_kom}")
         # print(f"DEBUG: PV FUTURE KOMISI BERIKUTNYA = {run_kom}")
         # print(f"DEBUG: DISC RATE PER MONTH = {rate_divisor}")
 
@@ -867,6 +867,104 @@ def generate_cashflow_projection2(df_header, df_detail, pad_expense=0.0, monthly
             val_bel_unit = val_bel / surv_beg if surv_beg != 0 else 0.0
 
         bel_per_unit_list[idx] = val_bel_unit
+
+    # Inisialisasi list penampung Movement BEL
+    bel_beginning_list = []
+    bel_premium_list = []
+    bel_commission_list = []
+    bel_expense_list = []
+    bel_other_expense_list = []
+    bel_claim_list = []
+    bel_surrender_list = []
+    unwind_list = []
+    inc_dec_bel_list = []
+    bel_ending_list = []
+    selisih_list = []
+
+    n_rows = len(df)
+    prev_bel_ending = 0.0  # Variabel pelacak BEL Ending bulan sebelumnya
+
+    for idx in range(n_rows):
+        # A. BEL Beginning: 
+        # Bulan pertama ambil dari nilai BEL asli, bulan berikutnya ambil dari BEL Ending baris sebelumnya
+        if idx == 0:
+            bel_beg = float(bel_list[idx]) if idx < len(bel_list) else 0.0
+        else:
+            bel_beg = prev_bel_ending
+
+        # Ambil variabel pendukung per baris
+        surv_beg = survive_beg_list[idx] if idx < len(survive_beg_list) else 1.0
+        surv_end = survive_end_list[idx] if idx < len(survive_end_list) else 1.0
+        
+        fut_prem = future_premiums_list[idx] if idx < len(future_premiums_list) else 0.0
+        komisi_after = after_komisi_list[idx] if idx < len(after_komisi_list) else 0.0
+        exp_1_after = total_future_expenses_1_list[idx] if idx < len(total_future_expenses_1_list) else 0.0
+        akuisisi_after = after_biaya_akuisisi_list[idx] if idx < len(after_biaya_akuisisi_list) else 0.0
+        
+        tot_fut_ben_after = (
+            after_term_life_list[idx] + after_nd_list[idx] + 
+            after_joint_term_life_list[idx] + after_joint_nd_list[idx] + 
+            after_pa_list[idx] + after_pv_death_list[idx] + 
+            after_ci_list[idx] + after_tpd_list[idx] + after_cp_list[idx] + 
+            after_tahapan_list[idx] + after_maturity_list[idx]
+        ) if idx < len(after_term_life_list) else 0.0
+
+        surr_after = after_surrender_list[idx] if idx < len(after_surrender_list) else 0.0
+
+        # B. BEL Premium
+        bel_prem = (fut_prem / surv_beg) if surv_beg != 0 else 0.0
+
+        # C. BEL Commission
+        bel_comm = (-komisi_after / surv_beg) if surv_beg != 0 else 0.0
+
+        # D. BEL Expense
+        bel_exp = (-exp_1_after / surv_beg) if surv_beg != 0 else 0.0
+
+        # E. BEL Other Expenses
+        bel_oth_exp = (-akuisisi_after / surv_beg) if surv_beg != 0 else 0.0
+
+        # F. BEL Claim
+        bel_claim = (-tot_fut_ben_after / surv_beg) if surv_beg != 0 else 0.0
+
+        # G. BEL Surrender
+        bel_surr = (-surr_after / surv_beg) if surv_beg != 0 else 0.0
+
+        # H. Unwind
+        unwind_val = (bel_beg + bel_prem + bel_comm + bel_exp + bel_oth_exp) * discount_rate_monthly
+
+        # I. Inc (Dec) of BEL
+        next_bel = bel_list[idx + 1] if idx + 1 < n_rows else 0.0
+        if next_bel == 0:
+            inc_dec_val = 0.0
+        else:
+            inv_surv_end = (1.0 / surv_end) if surv_end != 0 else 0.0
+            inv_surv_beg = (1.0 / surv_beg) if surv_beg != 0 else 0.0
+            inc_dec_val = next_bel * (inv_surv_end - inv_surv_beg)
+
+        # J. BEL Ending
+        bel_end = (
+            bel_beg + bel_prem + bel_comm + bel_exp + bel_oth_exp + 
+            bel_claim + bel_surr + unwind_val + inc_dec_val
+        )
+
+        # Simpan BEL Ending untuk dibaca sebagai BEL Beginning pada iterasi bulan berikutnya
+        prev_bel_ending = bel_end
+
+        # K. Selisih
+        bel_per_unit_val = bel_per_unit_list[idx] if idx < len(bel_per_unit_list) else 0.0
+        selisih_val = bel_beg - bel_per_unit_val
+
+        bel_beginning_list.append(bel_beg)
+        bel_premium_list.append(bel_prem)
+        bel_commission_list.append(bel_comm)
+        bel_expense_list.append(bel_exp)
+        bel_other_expense_list.append(bel_oth_exp)
+        bel_claim_list.append(bel_claim)
+        bel_surrender_list.append(bel_surr)
+        unwind_list.append(unwind_val)
+        inc_dec_bel_list.append(inc_dec_val)
+        bel_ending_list.append(bel_end)
+        selisih_list.append(selisih_val)
 
     # Masukkan ke kolom DataFrame
     df['Survive_Beginning'] = survive_beg_list
@@ -932,6 +1030,18 @@ def generate_cashflow_projection2(df_header, df_detail, pad_expense=0.0, monthly
     df['PV_Future_Premiums'] = pv_premiums_list
     df['BEL'] = bel_list
     df['BEL_Per_Unit'] = bel_per_unit_list
+
+    df['Movement_BEL_Beginning'] = bel_beginning_list
+    df['Movement_BEL_Premium'] = bel_premium_list
+    df['Movement_BEL_Commission'] = bel_commission_list
+    df['Movement_BEL_Expense'] = bel_expense_list
+    df['Movement_BEL_Other_Expense'] = bel_other_expense_list
+    df['Movement_BEL_Claim'] = bel_claim_list
+    df['Movement_BEL_Surrender'] = bel_surrender_list
+    df['Movement_Unwind'] = unwind_list
+    df['Movement_Inc_Dec_BEL'] = inc_dec_bel_list
+    df['Movement_BEL_Ending'] = bel_ending_list
+    df['Movement_Selisih'] = selisih_list
 
     # 6. Susun DataFrame Hasil Proyeksi
     projection = pd.DataFrame({
@@ -1009,6 +1119,7 @@ def generate_cashflow_projection2(df_header, df_detail, pad_expense=0.0, monthly
         "Total Future Expenses 1": df['Total_Future_Expenses_1'],
         "Total Future Expenses 2": df['Total_Future_Expenses_2'],
         "Future Premiums": df['Future_Premiums'],
+        # Kolom PV Future (Present Value) & BEL
         "PV Future Benefits (Claim)": df['PV_Future_Benefits'],
         "PV Surrender (Refund)": df['PV_Surrender'],
         "PV Future Komisi": df['PV_Future_Komisi'],
@@ -1019,7 +1130,19 @@ def generate_cashflow_projection2(df_header, df_detail, pad_expense=0.0, monthly
         "PV Future Expenses 2": df['PV_Future_Exp_2'],
         "PV Future Premiums": df['PV_Future_Premiums'],
         "BEL": df['BEL'],
-        "BEL Per Unit": df['BEL_Per_Unit']
+        "BEL Per Unit": df['BEL_Per_Unit'],
+        # Kolom Movement BEL
+        "BEL Beginning": df['Movement_BEL_Beginning'],
+        "BEL Premium": df['Movement_BEL_Premium'],
+        "BEL Commission": df['Movement_BEL_Commission'],
+        "BEL Expense": df['Movement_BEL_Expense'],
+        "BEL Other Expense": df['Movement_BEL_Other_Expense'],
+        "BEL Claim": df['Movement_BEL_Claim'],
+        "BEL Surrender": df['Movement_BEL_Surrender'],
+        "Unwind": df['Movement_Unwind'],
+        "Inc (Dec) of BEL": df['Movement_Inc_Dec_BEL'],
+        "BEL Ending": df['Movement_BEL_Ending'],
+        "Selisih": df['Movement_Selisih']
     })
     
     return projection
