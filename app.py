@@ -1,6 +1,6 @@
 import streamlit as st
 from src.data_loader import load_psak117_data
-from src.calculator import calculate_bel, calculate_ra_csm, generate_movement, get_discount_rate_ibpa, generate_cashflow_projection2
+from src.calculator import calculate_bel, calculate_ra_csm, generate_movement, generate_racsm_projection, get_discount_rate_ibpa, generate_cashflow_projection2
 from src.utils import format_idr, format_date_columns
 import pandas as pd
 
@@ -23,6 +23,19 @@ pad_mortality_input = st.sidebar.number_input("PAD Mortality (%)", min_value=0.0
 pad_lapse_input = st.sidebar.number_input("PAD Lapse (%)", min_value=0.0, max_value=100.0, value=0.0) / 100
 pad_expense_input = st.sidebar.number_input("PAD Expense (%)", min_value=0.0, max_value=100.0, value=0.0) / 100
 monthly_inflation_input = st.sidebar.number_input("Inflasi Bulanan (%)", value=0.21) / 100 # Default 0.2% sesuai contoh 1.002
+
+st.sidebar.subheader("Parameter Asumsi RA CSM")
+# Input PAD BEL dalam bentuk persen (misal: diisi 5 artinya 5%)
+pad_lapse_percent = st.sidebar.number_input("PAD Lapse RA CSM (%)", min_value=0.0, max_value=100.0, value=0.0, step=0.1, format="%.2f")
+pad_lapse_racsm = pad_lapse_percent / 100.0
+
+# Input PAD RA CSM dalam bentuk persen
+pad_racsm_percent = st.sidebar.number_input("PAD Expense RA CSM (%)", min_value=0.0, max_value=100.0, value=0.0, step=0.1, format="%.2f")
+pad_expense_racsm = pad_racsm_percent / 100.0
+
+# Input Inflasi RA CSM
+inflation_racsm_percent = st.sidebar.number_input("Monthly Inflation RA CSM (%)", min_value=0.0, max_value=100.0, value=0.0, step=0.01, format="%.2f")
+monthly_inflation_racsm = inflation_racsm_percent / 100.0
 
 if uploaded_file is not None:
     with st.spinner("Memotong dan memisahkan sheet secara vertikal & blok..."):
@@ -255,16 +268,30 @@ if uploaded_file is not None:
             
         # --- TAB RA & CSM ---
         with tab_ra_csm:
-            st.subheader("Valuasi Saldo Awal Pemenuhan Kewajiban Kontrak (Insepsi)")
+            # st.subheader("Valuasi Saldo Awal Pemenuhan Kewajiban Kontrak (Insepsi)")
             m1, m2, m3 = st.columns(3)
             m1.metric("BEL (Best Estimate Liability)", format_idr(summary_metrics["Total_BEL"]))
             m2.metric("RA (Risk Adjustment)", format_idr(summary_metrics["Total_RA"]))
             m3.metric("CSM (Contractual Service Margin)", format_idr(summary_metrics["Total_CSM"]))
             
-            if summary_metrics["Is_Onerous"]:
-                st.error("⚠️ Portofolio Kontrak berstatus Onerous (Rugi). Saldo awal CSM diatur menjadi Rp 0,00 dan rugi langsung diakui di P&L.")
-            else:
-                st.success("✨ Portofolio Kontrak Profitable. Keuntungan ditangguhkan ke dalam saldo CSM awal.")
+            # if summary_metrics["Is_Onerous"]:
+            #     st.error("⚠️ Portofolio Kontrak berstatus Onerous (Rugi). Saldo awal CSM diatur menjadi Rp 0,00 dan rugi langsung diakui di P&L.")
+            # else:
+            #     st.success("✨ Portofolio Kontrak Profitable. Keuntungan ditangguhkan ke dalam saldo CSM awal.")
+
+            df_racsm = generate_racsm_projection(
+                df_header=df_header,
+                df_detail=df_detail,
+                pad_expense_racsm=pad_expense_racsm,
+                monthly_inflation_racsm=monthly_inflation_racsm,
+                asumsi_inflasi=data_bundle.get("asumsi_inflasi"),
+                df_tmi=data_bundle.get("asumsi_tmi"),
+                discount_rate_monthly=discount_rate_monthly
+            )
+            # Menampilkan tabel
+            df_racsm.index += 1
+            # df_proyeksi_styled = highlight_lapse_column(df_racsm)
+            st.dataframe(df_racsm, use_container_width=True)
                 
         # --- TAB MOVEMENT ---
         with tab_movement:

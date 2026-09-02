@@ -122,7 +122,7 @@ def generate_movement(initial_csm, initial_ra, initial_bel):
             "Rilis ke Pendapatan (Fulfillment / Release to P&L)",
             "Saldo Akhir (Closing Balance)"
         ],
-        "BEL (IDR)": [initial_bel, initial_bel * 0.1, initial_bel * 0.04, -5000000, -initial_bel * 0.12, 0],
+        "BEL (IDR)": [initial_bel, initial_bel * 0.1, initial_bel * 0.04, -0, -initial_bel * 0.12, 0],
         "Risk Adjustment (IDR)": [initial_ra, initial_ra * 0.1, 0, 0, -initial_ra * 0.15, 0],
         "CSM (IDR)": [initial_csm, initial_csm * 0.05, initial_csm * 0.04, 0, -initial_csm * 0.1, 0]
     }
@@ -1185,3 +1185,137 @@ def get_discount_rate_ibpa(row, df_ibpa):
     except Exception as e:
         print(f"DEBUG Error get_discount_rate_ibpa: {e}")
         return 0.0
+
+def generate_racsm_projection(
+    df_header, df_detail, 
+    pad_expense_racsm=0.0,        # PAD Expense khusus RA CSM
+    monthly_inflation_racsm=0.0,  # Inflasi bulanan khusus RA CSM
+    asumsi_inflasi=None, df_tmi=None, pad_mortality=0.0, 
+    total_nd_global=0.0, total_joint_term_life_global=0.0, total_nd_joint_global=0.0,
+    total_pa_global=0.0, total_ci_global=0.0, total_tpd_global=0.0, total_cp_global=0.0,
+    asumsi_lapse_monthly=None, pad_lapse=0.0,
+    bonus_rate_monthly=0.0, discount_rate_monthly=0.0
+):
+    # 1. Gabungkan (Merge) df_detail dan df_header
+    if 'A_PolicyNo' in df_detail.columns and 'A_PolicyNo' in df_header.columns:
+        df = pd.merge(df_detail, df_header, on='A_PolicyNo', how='left', suffixes=('', '_header'))
+    else:
+        df = pd.concat([df_detail.reset_index(drop=True), df_header.reset_index(drop=True)], axis=1)
+
+    # 2. Hitung % Premi dan Fixed Cost khusus RA CSM menggunakan PAD Expense RA CSM
+    # Rumus: Basis BEL * (1 + pad_expense_racsm)
+    pct_premi_base = df['Biaya_Pemeliharaan_Polis_PCT_Premi'] if 'Biaya_Pemeliharaan_Polis_PCT_Premi' in df.columns else 0.0
+    fixed_cost_base = df['Biaya_Pemeliharaan_Polis_Fixed_Cost'] if 'Biaya_Pemeliharaan_Polis_Fixed_Cost' in df.columns else 0.0
+
+    racsm_pct_premi_value = pct_premi_base * (1 + pad_expense_racsm)
+    racsm_fixed_cost_value = fixed_cost_base * (1 + pad_expense_racsm)
+
+    # 3. Hitung Inflasi Bulanan & Fixed Cost (Dihitung Care) RA CSM
+    bulan_ke = df['Bulan_Ke'] if 'Bulan_Ke' in df.columns else pd.Series([1]*len(df))
+    
+    if asumsi_inflasi is not None and 'Effective' in df.columns:
+        # Jika menggunakan lookup asumsi inflasi khusus atau parameter bulanan RA CSM
+        eff_monthly_inflation_racsm = monthly_inflation_racsm
+    else:
+        eff_monthly_inflation_racsm = monthly_inflation_racsm
+
+    # Rumus: Fixed Cost RA CSM * (1 + inflasi per month RA CSM) ^ bulan_ke
+    racsm_fixed_cost_care = racsm_fixed_cost_value * ((1 + eff_monthly_inflation_racsm) ** bulan_ke)
+
+    # 4. Lookup TMI (Mortality) dan Decrements (sama seperti BEL agar sinkron)
+    def lookup_tmi(usia):
+        if df_tmi is None:
+            return 0.0
+        match = df_tmi[df_tmi.iloc[:, 0] == usia]
+        if not match.empty:
+            return match.iloc[0, 4]
+        return 0.0
+
+    df['Base_qx'] = df['Usia_Tertanggung'].apply(lookup_tmi)
+
+    if 'Pol_Term_M' in df.columns:
+        df['Pol_Term_M'] = df['Pol_Term_M'].apply(lambda x: max(1, int(x)) if pd.notnull(x) else 1)
+    else:
+        df['Pol_Term_M'] = df.get('Pol_Term_Y', 3) * 12
+
+    masa_asuransi_bulan = df['Pol_Term_M']
+    kondisi = (bulan_ke <= (masa_asuransi_bulan - 1)) & (bulan_ke != 0)
+    df['Monthly_qx'] = np.where(kondisi, df['Base_qx'] * (1 + pad_mortality), 0.0)
+
+    # 5. Inisialisasi list penampung iterasi RA CSM
+    survive_beg_list = []
+    term_life_list = []
+    lapse_list = []
+    mature_list = []
+    survive_end_list = []
+    akumulasi_bonus_list = []
+    prev_survive_end_dict = {}
+    prev_akumulasi_bonus_dict = {}
+
+    base_term_life_benefit = df['Term_Life'] if 'Term_Life' in df.columns else 0.0
+    base_bonus_benefit = df['Bonus'] if 'Bonus' in df.columns else 0.0
+    yearly_rate_cv = df['Yearly_Rate_Cash_Value'] if 'Yearly_Rate_Cash_Value' in df.columns else 0.0
+    monthly_rate_cv = df['Monthly_Rate_Cash_Value'] if 'Monthly_Rate_Cash_Value' in df.columns else 0.0
+    usia_tertanggung = df['Usia_Tertanggung'] if 'Usia_Tertanggung' in df.columns else 0
+
+    after_term_life_list = []
+
+    for idx, row in df.iterrows():
+        policy_id = row.get('Policy_ID', row.get('A_PolicyNo', 'default_policy'))
+        b_ke = row.get('Bulan_Ke', 1)
+        
+        # Survive beginning
+        if b_ke == 1 or policy_id not in prev_survive_end_dict:
+            survive_beg = 1.0
+        else:
+            survive_beg = prev_survive_end_dict.get(policy_id, 1.0)
+
+        q_term = row.get('Monthly_qx', 0.0)
+        q_lapse = 0.0 # atau disesuaikan jika ada tabel lapse RA CSM
+        q_mature = 1.0 if b_ke == masa_asuransi_bulan.iloc[idx] else 0.0
+
+        term_life_val = q_term * survive_beg
+        lapse_val = q_lapse * survive_beg
+        mature_val = q_mature * survive_beg
+
+        if b_ke == 0:
+            survive_end = 0.0
+        else:
+            survive_end = survive_beg - (term_life_val + lapse_val + mature_val)
+
+        prev_survive_end_dict[policy_id] = survive_end
+        survive_beg_list.append(survive_beg)
+        term_life_list.append(term_life_val)
+        survive_end_list.append(survive_end)
+
+        # Akumulasi Bonus RA CSM
+        bonus_val = base_bonus_benefit.iloc[idx] if hasattr(base_bonus_benefit, 'iloc') else base_bonus_benefit
+        prev_akrual = prev_akumulasi_bonus_dict.get(policy_id, 0.0)
+        if b_ke == 1 or policy_id not in prev_akumulasi_bonus_dict:
+            akr_bonus = bonus_val * (1 + bonus_rate_monthly)
+        else:
+            akr_bonus = (bonus_val + prev_akrual) * (1 + bonus_rate_monthly)
+        prev_akumulasi_bonus_dict[policy_id] = akr_bonus
+        akumulasi_bonus_list.append(akr_bonus)
+
+        # Term Life After Decrement RA CSM
+        b_term = base_term_life_benefit.iloc[idx] if hasattr(base_term_life_benefit, 'iloc') else base_term_life_benefit
+        val_after_term = 0.0 if b_term == 0 else (b_term + akr_bonus) * term_life_val
+        after_term_life_list.append(val_after_term)
+
+    # 6. Susun DataFrame Hasil Proyeksi RA CSM
+    projection_racsm = pd.DataFrame({
+        "Tahun Polis": df['A_Policy_Year'],
+        "Bulan ke-": df['Bulan_Ke'],
+        "Premi": df['Premi'],
+        "Komisi": df['Komisi'],
+        "Biaya Akuisisi": df['Biaya_Akuisisi'],
+        "% Premi": racsm_pct_premi_value,
+        "Fixed Cost": racsm_fixed_cost_value,
+        "Fixed Cost (Dihitung Care)": round(racsm_fixed_cost_care),
+        "Yearly Rate CV": yearly_rate_cv,
+        "Monthly Rate CV": monthly_rate_cv,
+        "Usia Tertanggung": usia_tertanggung
+    })
+    
+    return projection_racsm
