@@ -1,6 +1,6 @@
 import streamlit as st
 from src.data_loader import load_psak117_data
-from src.calculator import calculate_bel, calculate_ra_csm, generate_movement, generate_racsm_projection, get_discount_rate_ibpa, generate_cashflow_projection2
+from src.calculator import calculate_bel, calculate_ra_csm, generate_movement, generate_racsm_projection, get_discount_rate_ibpa, generate_bel_projection
 from src.utils import format_idr, format_date_columns
 import pandas as pd
 
@@ -202,8 +202,10 @@ if uploaded_file is not None:
                                       'PA (After)', 'PV Death (After)', 'CI (After)', 'TPD (After)', 'CP (After)', 'Surrender (SB - Benefit)',
                                       "Surrender (After)", "Tahapan (After)", "Maturity (After)", "Total Future Benefits (Claim)", "Surrender (Refund)",
                                       "Komisi (After)", "Biaya Akuisisi (After)", "% Premi (After)", "Fixed Cost (After)", "Total Future Expenses 1", "Total Future Expenses 2", "Future Premiums",
-                                      "PV Future Benefits (Claim)","PV Surrender (Refund)", "PV Future Komisi", "PV Future Biaya Akuisisi (Other Expense)", "PV Future % Premi", "PV Future Fixed Cost", "PV Future Expenses 1", "PV Future Expenses 2", "PV Future Premiums",
-                                      "BEL", "BEL Per Unit", "BEL Beginning", "BEL Premium", "BEL Commission", "BEL Expense", "BEL Other Expense", "BEL Claim", "BEL Surrender", "Unwind", "Inc (Dec) of BEL", "BEL Ending", "Selisih"]
+                                      "PV Future Benefits (Claim)","PV Surrender (Refund)", "PV Future Komisi", "PV Future Biaya Akuisisi (Other Expense)", "PV Future % Premi", 
+                                      "PV Future Fixed Cost", "PV Future Expenses 1", "PV Future Expenses 2", "PV Future Premiums",
+                                      "BEL", "BEL Per Unit", "BEL Beginning", "BEL Premium", "BEL Commission", "BEL Expense", "BEL Other Expense", "BEL Claim", 
+                                      "BEL Surrender", "Unwind", "Inc (Dec) of BEL", "BEL Ending", "Selisih"]
 
                 # Kolom berformat 0 atau 1 (seperti Mature)
                 cols_to_format_zero_one = ['Monthly qx (Mature)']
@@ -247,7 +249,7 @@ if uploaded_file is not None:
             # st.subheader("📋 Proyeksi Arus Kas Bulanan (Cash Flow)")
             st.markdown("---")
 
-            df_proyeksi = generate_cashflow_projection2(
+            df_proyeksi = generate_bel_projection(
                 df_header=df_header,
                 df_detail=df_detail, 
                 pad_expense=pad_expense_input,
@@ -279,6 +281,59 @@ if uploaded_file is not None:
             # else:
             #     st.success("✨ Portofolio Kontrak Profitable. Keuntungan ditangguhkan ke dalam saldo CSM awal.")
 
+            def highlight_lapse_column_racsm(df):
+                """
+                Memberikan highlight kuning pada kolom Lapse dan mengatur format desimal
+                hanya untuk kolom tertentu, sementara kolom lain tetap bersih.
+                """
+                # 1. Tentukan daftar kolom mata uang / nominal yang ingin ditampilkan tanpa desimal (.000000)
+                # Sesuaikan dengan nama kolom yang ada di dataframe Anda
+                cols_to_format_int = ['Premi', 'Komisi', 'Biaya Akuisisi', '% Premi', 'Fixed Cost', 'Fixed Cost (Dihitung Care)', 
+                                      'Monthly qx (ND)', 'Monthly qx (Term Life Joint)', 'Monthly qx (ND Joint)', 'Monthly qx (PA)',
+                                      'Monthly qx (CI)', 'Monthly qx (TPD)', 'Monthly qx (CP)','Term Life (BD - Benefit)', 'ND (Benefit)', 
+                                      'Akumulasi Bonus (BD - Benefit)',"Term Life (After)", "ND (After)", "Joint Term Life (After)", "Joint ND (After)",
+                                      'PA (After)', 'PV Death (After)', 'CI (After)', 'TPD (After)', 'CP (After)', 'Surrender (SB - Benefit)',
+                                      "Surrender (After)", "Tahapan (After)", "Maturity (After)", "Total Future Benefits (Claim)", "Surrender (Refund)",
+                                      "Komisi (After)", "Biaya Akuisisi (After)", "% Premi (After)", "Fixed Cost (After)", "Total Future Expenses 1", "Total Future Expenses 2", "Future Premiums",
+                                      "PV Future Benefits (Claim)","PV Surrender (Refund)", "PV Future Komisi", "PV Future Biaya Akuisisi (Other Expense)", "PV Future % Premi", 
+                                      "PV Future Fixed Cost", "PV Future Expenses 1", "PV Future Expenses 2", "PV Future Premiums",
+                                      "BEL", "BEL Per Unit", "BEL Beginning", "BEL Premium", "BEL Commission", "BEL Expense", "BEL Other Expense", "BEL Claim", 
+                                      "BEL Surrender", "Unwind", "Inc (Dec) of BEL", "BEL Ending", "Selisih"]
+
+                # Kolom berformat 0 atau 1 (seperti Mature)
+                cols_to_format_zero_one = ['Monthly qx (Mature)']
+
+                # Kolom berformat 6 desimal (Rate & Decrement)
+                cols_to_format_decimal = ['Survive beginning', 'Term Life', 'Lapse', 'Mature', 'Survive ending', 'ND', 
+                                          'Term Life Joint', 'ND Joint', 'PA', 'CI', 'TPD', 'CP',]
+
+                # Fungsi kustom untuk format angka ribuan dengan titik (.) ala Indonesia
+                def format_idr_thousand(val):
+                    if pd.isna(val):
+                        return "-"
+                    try:
+                        return f"{int(val):,}".replace(",", ".")
+                    except:
+                        return val
+                
+                styler = df.style.set_properties(
+                    subset=['Monthly qx (Lapse)'], 
+                    **{'background-color': '#FFF2CC', 'color': 'black', 'font-weight': 'bold'}
+                ).format(
+                    # Format 6 desimal khusus untuk kolom Lapse
+                    "{:.6f}", subset=['Monthly qx (Lapse)']
+                ).format(
+                    # Format tanpa desimal (integer) untuk kolom nominal uang
+                    format_idr_thousand, subset=[c for c in cols_to_format_int if c in df.columns]
+                ).format(
+                    # Format integer biasa untuk kolom Mature (0 atau 1)
+                    "{:.0f}", subset=[c for c in cols_to_format_zero_one if c in df.columns]
+                ).format(
+                    "{:.6f}", subset=[c for c in cols_to_format_decimal if c in df.columns]
+                )
+                
+                return styler            
+
             df_racsm = generate_racsm_projection(
                 df_header=df_header,
                 df_detail=df_detail,
@@ -286,12 +341,15 @@ if uploaded_file is not None:
                 monthly_inflation_racsm=monthly_inflation_racsm,
                 asumsi_inflasi=data_bundle.get("asumsi_inflasi"),
                 df_tmi=data_bundle.get("asumsi_tmi"),
-                discount_rate_monthly=discount_rate_monthly
+                discount_rate_monthly=discount_rate_monthly,
+                pad_lapse_racsm=pad_lapse_racsm,
+                bonus_rate_monthly=bonus_rate_monthly,
+                asumsi_lapse_monthly=data_bundle["asumsi_lapse_m2"]
             )
             # Menampilkan tabel
             df_racsm.index += 1
-            # df_proyeksi_styled = highlight_lapse_column(df_racsm)
-            st.dataframe(df_racsm, use_container_width=True)
+            df_proyeksi_styled = highlight_lapse_column_racsm(df_racsm)
+            st.dataframe(df_proyeksi_styled, use_container_width=True)
                 
         # --- TAB MOVEMENT ---
         with tab_movement:

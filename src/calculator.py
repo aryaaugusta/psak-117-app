@@ -206,7 +206,7 @@ def get_inflation_rate(tanggal_mulai, asumsi_inflasi):
     return 0.0
 
 
-def generate_cashflow_projection2(df_header, df_detail, pad_expense=0.0, monthly_inflation=0.0, 
+def generate_bel_projection(df_header, df_detail, pad_expense=0.0, monthly_inflation=0.0, 
                                   asumsi_inflasi=None, df_tmi=None, pad_mortality=0.0, 
                                   total_nd_global=0.0, total_joint_term_life_global=0.0, total_nd_joint_global=0.0,
                                   total_pa_global=0.0, total_ci_global=0.0, total_tpd_global=0.0, total_cp_global=0.0,
@@ -1190,11 +1190,10 @@ def generate_racsm_projection(
     df_header, df_detail, 
     pad_expense_racsm=0.0,        # PAD Expense khusus RA CSM
     monthly_inflation_racsm=0.0,  # Inflasi bulanan khusus RA CSM
-    asumsi_inflasi=None, df_tmi=None, pad_mortality=0.0, 
+    asumsi_inflasi=None, df_tmi=None, pad_mortality_racsm=0.0, 
     total_nd_global=0.0, total_joint_term_life_global=0.0, total_nd_joint_global=0.0,
     total_pa_global=0.0, total_ci_global=0.0, total_tpd_global=0.0, total_cp_global=0.0,
-    asumsi_lapse_monthly=None, pad_lapse=0.0,
-    bonus_rate_monthly=0.0, discount_rate_monthly=0.0
+    asumsi_lapse_monthly=None, bonus_rate_monthly=0.0, discount_rate_monthly=0.0, pad_lapse_racsm=0.0
 ):
     # 1. Gabungkan (Merge) df_detail dan df_header
     if 'A_PolicyNo' in df_detail.columns and 'A_PolicyNo' in df_header.columns:
@@ -1202,36 +1201,33 @@ def generate_racsm_projection(
     else:
         df = pd.concat([df_detail.reset_index(drop=True), df_header.reset_index(drop=True)], axis=1)
 
-    # 2. Hitung % Premi dan Fixed Cost khusus RA CSM menggunakan PAD Expense RA CSM
-    # Rumus: Basis BEL * (1 + pad_expense_racsm)
+    # 2. Hitung % Premi dan Fixed Cost khusus RA CSM
     pct_premi_base = df['Biaya_Pemeliharaan_Polis_PCT_Premi'] if 'Biaya_Pemeliharaan_Polis_PCT_Premi' in df.columns else 0.0
     fixed_cost_base = df['Biaya_Pemeliharaan_Polis_Fixed_Cost'] if 'Biaya_Pemeliharaan_Polis_Fixed_Cost' in df.columns else 0.0
 
     racsm_pct_premi_value = pct_premi_base * (1 + pad_expense_racsm)
     racsm_fixed_cost_value = fixed_cost_base * (1 + pad_expense_racsm)
 
-    # 3. Hitung Inflasi Bulanan & Fixed Cost (Dihitung Care) RA CSM
     bulan_ke = df['Bulan_Ke'] if 'Bulan_Ke' in df.columns else pd.Series([1]*len(df))
-    
-    if asumsi_inflasi is not None and 'Effective' in df.columns:
-        # Jika menggunakan lookup asumsi inflasi khusus atau parameter bulanan RA CSM
-        eff_monthly_inflation_racsm = monthly_inflation_racsm
-    else:
-        eff_monthly_inflation_racsm = monthly_inflation_racsm
+    racsm_fixed_cost_care = racsm_fixed_cost_value * ((1 + monthly_inflation_racsm) ** bulan_ke)
 
-    # Rumus: Fixed Cost RA CSM * (1 + inflasi per month RA CSM) ^ bulan_ke
-    racsm_fixed_cost_care = racsm_fixed_cost_value * ((1 + eff_monthly_inflation_racsm) ** bulan_ke)
-
-    # 4. Lookup TMI (Mortality) dan Decrements (sama seperti BEL agar sinkron)
-    def lookup_tmi(usia):
+    # 3. Lookup TMI & Rate qx Lengkap (Sama persis seperti BEL)
+    def lookup_tmi(usia, col_idx):
         if df_tmi is None:
             return 0.0
         match = df_tmi[df_tmi.iloc[:, 0] == usia]
         if not match.empty:
-            return match.iloc[0, 4]
+            return match.iloc[0, col_idx]
         return 0.0
 
-    df['Base_qx'] = df['Usia_Tertanggung'].apply(lookup_tmi)
+    df['Base_qx'] = df['Usia_Tertanggung'].apply(lambda x: lookup_tmi(x, 4))
+    df['Base_qx_ND'] = df['Usia_Tertanggung'].apply(lambda x: lookup_tmi(x, 6))
+    df['Base_qx_Term_Life_Joint'] = df['Usia_Tertanggung'].apply(lambda x: lookup_tmi(x, 8))
+    df['Base_qx_ND_Joint'] = df['Usia_Tertanggung'].apply(lambda x: lookup_tmi(x, 10))
+    df['Base_qx_PA'] = df['Usia_Tertanggung'].apply(lambda x: lookup_tmi(x, 12))
+    df['Base_qx_CI'] = df['Usia_Tertanggung'].apply(lambda x: lookup_tmi(x, 14))
+    df['Base_qx_TPD'] = df['Usia_Tertanggung'].apply(lambda x: lookup_tmi(x, 16))
+    df['Base_qx_CP'] = df['Usia_Tertanggung'].apply(lambda x: lookup_tmi(x, 18))
 
     if 'Pol_Term_M' in df.columns:
         df['Pol_Term_M'] = df['Pol_Term_M'].apply(lambda x: max(1, int(x)) if pd.notnull(x) else 1)
@@ -1240,70 +1236,214 @@ def generate_racsm_projection(
 
     masa_asuransi_bulan = df['Pol_Term_M']
     kondisi = (bulan_ke <= (masa_asuransi_bulan - 1)) & (bulan_ke != 0)
-    df['Monthly_qx'] = np.where(kondisi, df['Base_qx'] * (1 + pad_mortality), 0.0)
 
-    # 5. Inisialisasi list penampung iterasi RA CSM
+    df['Monthly_qx'] = np.where(kondisi, df['Base_qx'] * (1 + pad_mortality_racsm), 0.0)
+    df['Monthly_qx_ND'] = np.where(total_nd_global == 0, 0.0, np.where(kondisi, df['Base_qx_ND'] * (1 + pad_mortality_racsm), 0.0))
+    df['Monthly_qx_Term_Life_Joint'] = np.where(total_joint_term_life_global == 0, 0.0, np.where(kondisi, df['Base_qx_Term_Life_Joint'] * (1 + pad_mortality_racsm), 0.0))
+    df['Monthly_qx_ND_Joint'] = np.where(total_nd_joint_global == 0, 0.0, np.where(kondisi, df['Base_qx_ND_Joint'] * (1 + pad_mortality_racsm), 0.0))
+    df['Monthly_qx_PA'] = np.where(total_pa_global == 0, 0.0, np.where(kondisi, df['Base_qx_PA'] * (1 + pad_mortality_racsm), 0.0))
+    df['Monthly_qx_CI'] = np.where(total_ci_global == 0, 0.0, np.where(kondisi, df['Base_qx_CI'] * (1 + pad_mortality_racsm), 0.0))
+    df['Monthly_qx_TPD'] = np.where(total_tpd_global == 0, 0.0, np.where(kondisi, df['Base_qx_TPD'] * (1 + pad_mortality_racsm), 0.0))
+    df['Monthly_qx_CP'] = np.where(total_cp_global == 0, 0.0, np.where(kondisi, df['Base_qx_CP'] * (1 + pad_mortality_racsm), 0.0))
+
+    # Lookup Lapse Rate (Sama seperti BEL)
+    def get_lapse_rate(row, table):
+        try:
+            if table is None: return 0.0
+            tanggal_eff = pd.to_datetime(row.get('Effective', '2023-01-01'))
+            uw_year_target = tanggal_eff.year
+            mpp_val = int(float(row.get('Masa_Pembayaran_Premi_Dasar', 0)))
+            tahun_polis_int = int(float(row.get('A_Policy_Year', 1)))
+            
+            col_uw = pd.to_numeric(table.iloc[:, 0], errors='coerce').astype('Int64')
+            col_mpp = pd.to_numeric(table.iloc[:, 1], errors='coerce').astype('Int64')
+            row_match = table[(col_uw == uw_year_target) & (col_mpp == mpp_val)]
+            
+            if row_match.empty: return 0.0
+            col_idx = tahun_polis_int + 1
+            if col_idx < len(row_match.columns):
+                rate = row_match.iloc[0, col_idx]
+                return float(rate) if pd.notnull(rate) else 0.0
+            return 0.0
+        except:
+            return 0.0
+
+    df['Base_Lapse_Rate'] = df.apply(lambda row: get_lapse_rate(row, asumsi_lapse_monthly), axis=1)
+    kondisi_monthly_lapse = (bulan_ke > 0) & (bulan_ke < masa_asuransi_bulan)
+    df['Monthly_qx_Lapse'] = kondisi_monthly_lapse.astype(int) * df['Base_Lapse_Rate'] * (1 + pad_lapse_racsm)
+    df['Monthly_qx_Mature'] = np.where(bulan_ke == masa_asuransi_bulan, 1.0, 0.0)
+
+    # Inisialisasi list penampung secara lengkap di awal
     survive_beg_list = []
     term_life_list = []
+    nd_list = []
     lapse_list = []
     mature_list = []
+    term_life_joint_list = []
+    nd_joint_list = []
+    pa_list = []
+    ci_list = []
+    tpd_list = []
+    cp_list = []
     survive_end_list = []
-    akumulasi_bonus_list = []
-    prev_survive_end_dict = {}
-    prev_akumulasi_bonus_dict = {}
 
-    base_term_life_benefit = df['Term_Life'] if 'Term_Life' in df.columns else 0.0
-    base_bonus_benefit = df['Bonus'] if 'Bonus' in df.columns else 0.0
-    yearly_rate_cv = df['Yearly_Rate_Cash_Value'] if 'Yearly_Rate_Cash_Value' in df.columns else 0.0
-    monthly_rate_cv = df['Monthly_Rate_Cash_Value'] if 'Monthly_Rate_Cash_Value' in df.columns else 0.0
-    usia_tertanggung = df['Usia_Tertanggung'] if 'Usia_Tertanggung' in df.columns else 0
+    akumulasi_bonus_list = []
+    prev_akumulasi_bonus_dict = {}
+    prev_survive_end_dict = {}
+
+    term_life_benefit_list = []
+    nd_benefit_list = []
+    joint_term_life_benefit_list = []
+    joint_nd_benefit_list = []
+    pa_benefit_list = []
+    pv_death_before_pv_benefit_list = []
+    ci_benefit_list = []
+    tpd_benefit_list = []
+    cp_benefit_list = []
+    bonus_benefit_list = []
+
+    surrender_list = []
+    tahapan_list = []
+    maturity_list = []
 
     after_term_life_list = []
+    after_nd_list = []
+    after_joint_term_life_list = []
+    after_joint_nd_list = []
+    after_pa_list = []
+    after_ci_list = []
+    after_tpd_list = []
+    after_cp_list = []
+    after_surrender_list = []
+    after_tahapan_list = []
+    after_maturity_list = []
 
+    base_term_life = df['Term_Life'] if 'Term_Life' in df.columns else 0.0
+    base_nd = df['ND'] if 'ND' in df.columns else 0.0
+    base_j_term = df['Term_Life_Joint'] if 'Term_Life_Joint' in df.columns else 0.0
+    base_j_nd = df['ND_Joint'] if 'ND_Joint' in df.columns else 0.0
+    base_pa = df['PA'] if 'PA' in df.columns else 0.0
+    base_pv_death_bpv = df['PV_Death_Before_PV'] if 'PV_Death_Before_PV' in df.columns else 0.0
+    base_ci = df['CI'] if 'CI' in df.columns else 0.0
+    base_tpd = df['TPD'] if 'TPD' in df.columns else 0.0
+    base_cp = df['CP'] if 'CP' in df.columns else 0.0
+    base_bonus = df['Bonus'] if 'Bonus' in df.columns else 0.0
+    base_surr = df['Surrender'] if 'Surrender' in df.columns else 0.0
+    base_tah = df['Tahapan'] if 'Tahapan' in df.columns else 0.0
+    base_mat = df['Maturity'] if 'Maturity' in df.columns else 0.0
+
+    # -------------------------------------------------------------
+    # SATU LOOP UTAMA YANG AMAN DARI INDEX OUT OF RANGE
+    # -------------------------------------------------------------
     for idx, row in df.iterrows():
         policy_id = row.get('Policy_ID', row.get('A_PolicyNo', 'default_policy'))
         b_ke = row.get('Bulan_Ke', 1)
         
-        # Survive beginning
-        if b_ke == 1 or policy_id not in prev_survive_end_dict:
-            survive_beg = 1.0
-        else:
-            survive_beg = prev_survive_end_dict.get(policy_id, 1.0)
+        # 1. Survive Beginning
+        survive_beg = 1.0 if (b_ke == 1 or policy_id not in prev_survive_end_dict) else prev_survive_end_dict.get(policy_id, 1.0)
 
+        # Ambil qx rate
         q_term = row.get('Monthly_qx', 0.0)
-        q_lapse = 0.0 # atau disesuaikan jika ada tabel lapse RA CSM
-        q_mature = 1.0 if b_ke == masa_asuransi_bulan.iloc[idx] else 0.0
+        q_nd = row.get('Monthly_qx_ND', 0.0)
+        q_lapse = row.get('Monthly_qx_Lapse', 0.0)
+        q_mature = row.get('Monthly_qx_Mature', 0.0)
+        q_term_joint = row.get('Monthly_qx_Term_Life_Joint', 0.0)
+        q_nd_joint = row.get('Monthly_qx_ND_Joint', 0.0)
+        q_pa = row.get('Monthly_qx_PA', 0.0)
+        q_ci = row.get('Monthly_qx_CI', 0.0)
+        q_tpd = row.get('Monthly_qx_TPD', 0.0)
+        q_cp = row.get('Monthly_qx_CP', 0.0)
 
+        # Decrement Values
         term_life_val = q_term * survive_beg
+        nd_val = q_nd * survive_beg
         lapse_val = q_lapse * survive_beg
         mature_val = q_mature * survive_beg
+        term_life_joint_val = q_term_joint * survive_beg
+        nd_joint_val = q_nd_joint * survive_beg
+        pa_val = q_pa * survive_beg
+        ci_val = q_ci * survive_beg
+        tpd_val = q_tpd * survive_beg
+        cp_val = q_cp * survive_beg
 
+        # Survive Ending
         if b_ke == 0:
             survive_end = 0.0
         else:
             survive_end = survive_beg - (term_life_val + lapse_val + mature_val)
 
         prev_survive_end_dict[policy_id] = survive_end
+
         survive_beg_list.append(survive_beg)
         term_life_list.append(term_life_val)
+        nd_list.append(nd_val)
+        lapse_list.append(lapse_val)
+        mature_list.append(mature_val)
+        term_life_joint_list.append(term_life_joint_val)
+        nd_joint_list.append(nd_joint_val)
+        pa_list.append(pa_val)
+        ci_list.append(ci_val)
+        tpd_list.append(tpd_val)
+        cp_list.append(cp_val)
         survive_end_list.append(survive_end)
 
-        # Akumulasi Bonus RA CSM
-        bonus_val = base_bonus_benefit.iloc[idx] if hasattr(base_bonus_benefit, 'iloc') else base_bonus_benefit
+        # 2. Benefits & Akumulasi Bonus
+        t_ben = base_term_life.iloc[idx] if hasattr(base_term_life, 'iloc') else base_term_life
+        nd_ben = base_nd.iloc[idx] if hasattr(base_nd, 'iloc') else base_nd
+        jt_ben = base_j_term.iloc[idx] if hasattr(base_j_term, 'iloc') else base_j_term
+        jnd_ben = base_j_nd.iloc[idx] if hasattr(base_j_nd, 'iloc') else base_j_nd
+        pa_ben = base_pa.iloc[idx] if hasattr(base_pa, 'iloc') else base_pa
+        pv_bpv_ben = base_pv_death_bpv.iloc[idx] if hasattr(base_pv_death_bpv, 'iloc') else base_pv_death_bpv
+        ci_ben = base_ci.iloc[idx] if hasattr(base_ci, 'iloc') else base_ci
+        tpd_ben = base_tpd.iloc[idx] if hasattr(base_tpd, 'iloc') else base_tpd
+        cp_ben = base_cp.iloc[idx] if hasattr(base_cp, 'iloc') else base_cp
+        bon_ben = base_bonus.iloc[idx] if hasattr(base_bonus, 'iloc') else base_bonus
+        
+        sur_ben = base_surr.iloc[idx] if hasattr(base_surr, 'iloc') else base_surr
+        tah_ben = base_tah.iloc[idx] if hasattr(base_tah, 'iloc') else base_tah
+        mat_ben = base_mat.iloc[idx] if hasattr(base_mat, 'iloc') else base_mat
+
         prev_akrual = prev_akumulasi_bonus_dict.get(policy_id, 0.0)
         if b_ke == 1 or policy_id not in prev_akumulasi_bonus_dict:
-            akr_bonus = bonus_val * (1 + bonus_rate_monthly)
+            akr_bonus = bon_ben * (1 + bonus_rate_monthly)
         else:
-            akr_bonus = (bonus_val + prev_akrual) * (1 + bonus_rate_monthly)
+            akr_bonus = (bon_ben + prev_akrual) * (1 + bonus_rate_monthly)
         prev_akumulasi_bonus_dict[policy_id] = akr_bonus
+
+        term_life_benefit_list.append(t_ben)
+        nd_benefit_list.append(nd_ben)
+        joint_term_life_benefit_list.append(jt_ben)
+        joint_nd_benefit_list.append(jnd_ben)
+        pa_benefit_list.append(pa_ben)
+        pv_death_before_pv_benefit_list.append(pv_bpv_ben)
+        ci_benefit_list.append(ci_ben)
+        tpd_benefit_list.append(tpd_ben)
+        cp_benefit_list.append(cp_ben)
+        bonus_benefit_list.append(bon_ben)
         akumulasi_bonus_list.append(akr_bonus)
 
-        # Term Life After Decrement RA CSM
-        b_term = base_term_life_benefit.iloc[idx] if hasattr(base_term_life_benefit, 'iloc') else base_term_life_benefit
-        val_after_term = 0.0 if b_term == 0 else (b_term + akr_bonus) * term_life_val
-        after_term_life_list.append(val_after_term)
+        surrender_list.append(sur_ben)
+        tahapan_list.append(tah_ben)
+        maturity_list.append(mat_ben)
 
-    # 6. Susun DataFrame Hasil Proyeksi RA CSM
+        # 3. After Decrement
+        after_term_life_list.append(0.0 if t_ben == 0 else (t_ben + akr_bonus) * term_life_val)
+        after_nd_list.append(0.0 if nd_ben == 0 else nd_ben * nd_val)
+        after_joint_term_life_list.append(jt_ben * term_life_joint_val)
+        after_joint_nd_list.append(jnd_ben * nd_joint_val)
+        after_pa_list.append(pa_ben * pa_val)
+        after_ci_list.append(ci_ben * ci_val)
+        after_tpd_list.append(tpd_ben * tpd_val)
+        after_cp_list.append(cp_ben * cp_val)
+
+        after_surrender_list.append((sur_ben + akr_bonus) * lapse_val)
+        after_tahapan_list.append(tah_ben * survive_end)
+        after_maturity_list.append((mat_ben + akr_bonus) * mature_val)
+
+    pv_death_benefit_list = [0.0] * len(df)
+    after_pv_death_list = [0.0] * len(df)
+
+    # 5. Susun DataFrame Hasil Proyeksi RA CSM Lengkap
     projection_racsm = pd.DataFrame({
         "Tahun Polis": df['A_Policy_Year'],
         "Bulan ke-": df['Bulan_Ke'],
@@ -1313,9 +1453,65 @@ def generate_racsm_projection(
         "% Premi": racsm_pct_premi_value,
         "Fixed Cost": racsm_fixed_cost_value,
         "Fixed Cost (Dihitung Care)": round(racsm_fixed_cost_care),
-        "Yearly Rate CV": yearly_rate_cv,
-        "Monthly Rate CV": monthly_rate_cv,
-        "Usia Tertanggung": usia_tertanggung
+        "Yearly Rate CV": df.get('Yearly_Rate_Cash_Value', 0.0),
+        "Monthly Rate CV": df.get('Monthly_Rate_Cash_Value', 0.0),
+        "Usia Tertanggung": df['Usia_Tertanggung'],
+        # Rate qx
+        "Monthly qx (Term Life)": df['Monthly_qx'],
+        "Monthly qx (ND)": df['Monthly_qx_ND'],
+        "Monthly qx (Term Life Joint)": df['Monthly_qx_Term_Life_Joint'],
+        "Monthly qx (ND Joint)": df['Monthly_qx_ND_Joint'],
+        "Monthly qx (PA)": df['Monthly_qx_PA'],
+        "Monthly qx (CI)": df['Monthly_qx_CI'],
+        "Monthly qx (TPD)": df['Monthly_qx_TPD'],
+        "Monthly qx (CP)": df['Monthly_qx_CP'],
+        "Monthly qx (Lapse)": df['Monthly_qx_Lapse'],
+        "Monthly qx (Mature)": df['Monthly_qx_Mature'],
+        # Decrements
+        "Survive beginning": survive_beg_list,
+        "Term Life": term_life_list,
+        "Lapse": lapse_list,
+        "Mature": mature_list,
+        "Survive ending": survive_end_list,
+        "ND": nd_list,
+        "Term Life Joint": term_life_joint_list,
+        "ND Joint": nd_joint_list,
+        "PA": pa_list,
+        "CI": ci_list,
+        "TPD": tpd_list,
+        "CP": cp_list,
+        # Before Decrement (Benefits & Survival Benefits)
+        "Term Life (BD - Benefit)": term_life_benefit_list,
+        "ND (BD - Benefit)": nd_benefit_list,
+        "Term Life Joint (BD - Benefit)": joint_term_life_benefit_list,
+        "ND Joint (BD - Benefit)": joint_nd_benefit_list,
+        "PA (BD - Benefit)": pa_benefit_list,
+        "PV Death Before PV (BD - Benefit)": pv_death_before_pv_benefit_list,
+        "PV Death (Before Decr)": pv_death_benefit_list,
+        "CI (BD - Benefit)": ci_benefit_list,
+        "TPD (BD - Benefit)": tpd_benefit_list,
+        "CP (BD - Benefit)": cp_benefit_list,
+        "Bonus (BD - Benefit)": bonus_benefit_list,
+        "Akumulasi Bonus (BD - Benefit)": akumulasi_bonus_list,
+        "Surrender (SB - Benefit)": surrender_list,
+        "Tahapan (SB - Benefit)": tahapan_list,
+        "Maturity (SB - Benefit)": maturity_list,
+        # After Decrement (Benefits & Survival Benefits)
+        "Term Life (After)": after_term_life_list,
+        "ND (After)": after_nd_list,
+        "Joint Term Life (After)": after_joint_term_life_list,
+        "Joint ND (After)": after_joint_nd_list,
+        "PA (After)": after_pa_list,
+        "PV Death (After)": after_pv_death_list,
+        "CI (After)": after_ci_list,
+        "TPD (After)": after_tpd_list,
+        "CP (After)": after_cp_list,
+        "Surrender (After)": after_surrender_list,
+        "Tahapan (After)": after_tahapan_list,
+        "Maturity (After)": after_maturity_list
     })
+    
+    # Perbaikan mapping kolom PA agar akurat menggunakan list
+    projection_racsm["PA"] = pa_list
     
     return projection_racsm
