@@ -1318,6 +1318,17 @@ def generate_racsm_projection(
     after_tahapan_list = []
     after_maturity_list = []
 
+    # Inisialisasi list penampung Total After Decrement (Expenses & Premiums)
+    after_komisi_list = []
+    after_biaya_akuisisi_list = []
+    after_pct_premi_list = []
+    after_fixed_cost_list = []
+    total_future_expenses_1_list = []
+    total_future_expenses_list = []
+    future_premiums_list = []
+    total_future_benefits_list = []
+    surrender_refund_list = []
+
     base_term_life = df['Term_Life'] if 'Term_Life' in df.columns else 0.0
     base_nd = df['ND'] if 'ND' in df.columns else 0.0
     base_j_term = df['Term_Life_Joint'] if 'Term_Life_Joint' in df.columns else 0.0
@@ -1440,6 +1451,51 @@ def generate_racsm_projection(
         after_tahapan_list.append(tah_ben * survive_end)
         after_maturity_list.append((mat_ben + akr_bonus) * mature_val)
 
+        # Ambil nilai dasar untuk Expenses & Premiums (menggunakan basis RA CSM untuk % Premi & Fixed Cost)
+        komisi_val = float(row.get('Komisi', 0.0))
+        biaya_akuisisi_val = float(row.get('Biaya_Akuisisi', 0.0))
+        
+        # Menggunakan nilai yang sudah dikali PAD Expense RA CSM
+        pct_premi_val = float(racsm_pct_premi_value.iloc[idx]) if hasattr(racsm_pct_premi_value, 'iloc') else float(racsm_pct_premi_value)
+        fixed_cost_care_val = float(racsm_fixed_cost_care.iloc[idx]) if hasattr(racsm_fixed_cost_care, 'iloc') else float(racsm_fixed_cost_care)
+        
+        premi_val = float(row.get('Premi', 0.0))
+
+        # Bulatkan dasar biaya seperti aturan Excel sebelumnya
+        base_komisi = round(komisi_val)
+        base_biaya_akuisisi = round(biaya_akuisisi_val)
+        base_pct_premi = round(pct_premi_val)
+
+        # --- RUMUS TOTAL AFTER DECREMENT (EXPENSES & PREMIUMS) ---
+        val_after_komisi = base_komisi * survive_beg
+        val_after_biaya_akuisisi = base_biaya_akuisisi * survive_end
+        val_after_pct_premi = base_pct_premi * survive_end
+        val_after_fixed_cost = fixed_cost_care_val * survive_end
+
+        val_total_expenses_1 = val_after_pct_premi + val_after_fixed_cost
+        val_total_expenses = (base_komisi + base_biaya_akuisisi + base_pct_premi + fixed_cost_care_val) * survive_beg
+        val_future_premiums = premi_val * survive_beg
+
+        # --- TOTAL FUTURE BENEFITS (CLAIM) & SURRENDER (REFUND) ---
+        tot_claim = (
+            after_term_life_list[idx] + after_nd_list[idx] + 
+            after_joint_term_life_list[idx] + after_joint_nd_list[idx] + 
+            # after_pa_list[idx] + after_pv_death_list[idx] +
+            after_pa_list[idx] + after_ci_list[idx] + after_tpd_list[idx] + after_cp_list[idx] + 
+            after_tahapan_list[idx] + after_maturity_list[idx]
+        )
+        surr_refund = after_surrender_list[idx]
+
+        after_komisi_list.append(val_after_komisi)
+        after_biaya_akuisisi_list.append(val_after_biaya_akuisisi)
+        after_pct_premi_list.append(val_after_pct_premi)
+        after_fixed_cost_list.append(val_after_fixed_cost)
+        total_future_expenses_1_list.append(val_total_expenses_1)
+        total_future_expenses_list.append(val_total_expenses)
+        future_premiums_list.append(val_future_premiums)
+        total_future_benefits_list.append(tot_claim)
+        surrender_refund_list.append(surr_refund)
+
     pv_death_benefit_list = [0.0] * len(df)
     after_pv_death_list = [0.0] * len(df)
 
@@ -1508,7 +1564,17 @@ def generate_racsm_projection(
         "CP (After)": after_cp_list,
         "Surrender (After)": after_surrender_list,
         "Tahapan (After)": after_tahapan_list,
-        "Maturity (After)": after_maturity_list
+        "Maturity (After)": after_maturity_list,
+        # Total After Decrement
+        "Total Future Benefits (Claim)": total_future_benefits_list,
+        "Surrender (Refund)": surrender_refund_list,
+        "Komisi (After)": after_komisi_list,
+        "Biaya Akuisisi (After)": after_biaya_akuisisi_list,
+        "% Premi (After)": after_pct_premi_list,
+        "Fixed Cost (After)": after_fixed_cost_list,
+        "Total Future Expenses 1": total_future_expenses_1_list,
+        "Total Future Expenses": total_future_expenses_list,
+        "Future Premiums": future_premiums_list
     })
     
     # Perbaikan mapping kolom PA agar akurat menggunakan list
