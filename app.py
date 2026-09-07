@@ -26,15 +26,15 @@ monthly_inflation_input = st.sidebar.number_input("Inflasi Bulanan (%)", value=0
 
 st.sidebar.subheader("Parameter Asumsi RA CSM")
 # Input PAD BEL dalam bentuk persen (misal: diisi 5 artinya 5%)
-pad_lapse_percent = st.sidebar.number_input("PAD Lapse RA CSM (%)", min_value=0.0, max_value=100.0, value=0.0, step=0.1, format="%.2f")
+pad_lapse_percent = st.sidebar.number_input("PAD Lapse RA CSM (%)", min_value=-100.0, max_value=100.0, value=-15.0, step=0.1, format="%.2f")
 pad_lapse_racsm = pad_lapse_percent / 100.0
 
 # Input PAD RA CSM dalam bentuk persen
-pad_racsm_percent = st.sidebar.number_input("PAD Expense RA CSM (%)", min_value=0.0, max_value=100.0, value=0.0, step=0.1, format="%.2f")
+pad_racsm_percent = st.sidebar.number_input("PAD Expense RA CSM (%)", min_value=-100.0, max_value=100.0, value=5.0, step=0.1, format="%.2f")
 pad_expense_racsm = pad_racsm_percent / 100.0
 
 # Input Inflasi RA CSM
-inflation_racsm_percent = st.sidebar.number_input("Monthly Inflation RA CSM (%)", min_value=0.0, max_value=100.0, value=0.0, step=0.01, format="%.2f")
+inflation_racsm_percent = st.sidebar.number_input("Monthly Inflation RA CSM (%)", min_value=-100.0, max_value=100.0, value=0.21, step=0.01, format="%.2f")
 monthly_inflation_racsm = inflation_racsm_percent / 100.0
 
 if uploaded_file is not None:
@@ -298,7 +298,7 @@ if uploaded_file is not None:
                                       "PV Future Benefits (Claim)","PV Surrender (Refund)", "PV Future Komisi", "PV Future Biaya Akuisisi (Other Expense)", "PV Future % Premi", 
                                       "PV Future Fixed Cost", "PV Future Expenses 1", "PV Future Expenses 2", "PV Future Premiums",
                                       "BEL", "BEL Per Unit", "BEL Beginning", "BEL Premium", "BEL Commission", "BEL Expense", "BEL Other Expense", "BEL Claim", 
-                                      "BEL Surrender", "Unwind", "Inc (Dec) of BEL", "BEL Ending", "Selisih"]
+                                      "BEL Surrender", "Unwind", "Inc (Dec) of BEL", "BEL Ending", "Selisih", "BEL+PAD", "RA", "RA Per Unit"]
 
                 # Kolom berformat 0 atau 1 (seperti Mature)
                 cols_to_format_zero_one = ['Monthly qx (Mature)']
@@ -344,7 +344,8 @@ if uploaded_file is not None:
                 discount_rate_monthly=discount_rate_monthly,
                 pad_lapse_racsm=pad_lapse_racsm,
                 bonus_rate_monthly=bonus_rate_monthly,
-                asumsi_lapse_monthly=data_bundle["asumsi_lapse_m2"]
+                asumsi_lapse_monthly=data_bundle["asumsi_lapse_m2"],
+                bel_master=df_proyeksi["BEL"]
             )
             # Menampilkan tabel
             df_racsm.index += 1

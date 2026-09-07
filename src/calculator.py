@@ -1193,7 +1193,8 @@ def generate_racsm_projection(
     asumsi_inflasi=None, df_tmi=None, pad_mortality_racsm=0.0, 
     total_nd_global=0.0, total_joint_term_life_global=0.0, total_nd_joint_global=0.0,
     total_pa_global=0.0, total_ci_global=0.0, total_tpd_global=0.0, total_cp_global=0.0,
-    asumsi_lapse_monthly=None, bonus_rate_monthly=0.0, discount_rate_monthly=0.0, pad_lapse_racsm=0.0
+    asumsi_lapse_monthly=None, bonus_rate_monthly=0.0, discount_rate_monthly=0.0, pad_lapse_racsm=0.0,
+    bel_master=None
 ):
     # 1. Gabungkan (Merge) df_detail dan df_header
     if 'A_PolicyNo' in df_detail.columns and 'A_PolicyNo' in df_header.columns:
@@ -1468,9 +1469,9 @@ def generate_racsm_projection(
 
         # --- RUMUS TOTAL AFTER DECREMENT (EXPENSES & PREMIUMS) ---
         val_after_komisi = base_komisi * survive_beg
-        val_after_biaya_akuisisi = base_biaya_akuisisi * survive_end
-        val_after_pct_premi = base_pct_premi * survive_end
-        val_after_fixed_cost = fixed_cost_care_val * survive_end
+        val_after_biaya_akuisisi = base_biaya_akuisisi * survive_beg
+        val_after_pct_premi = base_pct_premi * survive_beg
+        val_after_fixed_cost = fixed_cost_care_val * survive_beg
 
         val_total_expenses_1 = val_after_pct_premi + val_after_fixed_cost
         val_total_expenses = (base_komisi + base_biaya_akuisisi + base_pct_premi + fixed_cost_care_val) * survive_beg
@@ -1495,6 +1496,92 @@ def generate_racsm_projection(
         future_premiums_list.append(val_future_premiums)
         total_future_benefits_list.append(tot_claim)
         surrender_refund_list.append(surr_refund)
+
+    # ==========================================
+    # BACKWARD RECURSION UNTUK PV, BEL+PAD, RA, & RA PER UNIT (RA CSM)
+    # ==========================================
+    n_rows = len(df)
+    rate_divisor = (1 + discount_rate_monthly) if discount_rate_monthly != 0 else 1.0
+
+    pv_benefits_list = [0.0] * n_rows
+    pv_surrender_list = [0.0] * n_rows
+    pv_komisi_list = [0.0] * n_rows
+    pv_akuisisi_list = [0.0] * n_rows
+    pv_pct_premi_list = [0.0] * n_rows
+    pv_fixed_cost_list = [0.0] * n_rows
+    pv_exp_1_list = [0.0] * n_rows
+    pv_exp_2_list = [0.0] * n_rows
+    pv_premiums_list = [0.0] * n_rows
+    bel_pad_list = [0.0] * n_rows
+    ra_list = [0.0] * n_rows
+    ra_per_unit_list = [0.0] * n_rows
+
+    run_ben = run_sur = run_kom = run_aku = run_pct = run_fix = run_ex1 = run_ex2 = run_pre = 0.0
+    
+    # Iterasi mundur dari baris terakhir ke baris pertama
+    for idx in range(n_rows - 1, -1, -1):
+        curr_ben = total_future_benefits_list[idx]
+        curr_sur = surrender_refund_list[idx]
+        curr_kom = after_komisi_list[idx]
+        curr_aku = after_biaya_akuisisi_list[idx]
+        curr_pct = after_pct_premi_list[idx]
+        curr_fix = after_fixed_cost_list[idx]
+        curr_ex1 = total_future_expenses_1_list[idx]
+        curr_ex2 = total_future_expenses_list[idx]
+        curr_pre = future_premiums_list[idx]
+
+        if idx == n_rows - 1:
+            run_ben = curr_ben
+            run_sur = curr_sur
+            run_kom = curr_kom
+            run_aku = curr_aku
+            run_pct = curr_pct
+            run_fix = curr_fix
+            run_ex1 = curr_ex1
+            run_ex2 = curr_ex2
+            run_pre = curr_pre
+        else:
+            run_ben = (curr_ben + run_ben) / rate_divisor
+            run_sur = (curr_sur + run_sur) / rate_divisor
+            run_kom = curr_kom + (run_kom / rate_divisor)
+            run_aku = curr_aku + (run_aku / rate_divisor)
+            run_pct = curr_pct + (run_pct / rate_divisor)
+            run_fix = curr_fix + (run_fix / rate_divisor)
+            run_ex1 = curr_ex1 + (run_ex1 / rate_divisor)
+            run_ex2 = curr_ex2 + (run_ex2 / rate_divisor)
+            run_pre = curr_pre + (run_pre / rate_divisor)
+
+        pv_benefits_list[idx] = run_ben
+        pv_surrender_list[idx] = run_sur
+        pv_komisi_list[idx] = run_kom
+        pv_akuisisi_list[idx] = run_aku
+        pv_pct_premi_list[idx] = run_pct
+        pv_fixed_cost_list[idx] = run_fix
+        pv_exp_1_list[idx] = run_ex1
+        pv_exp_2_list[idx] = run_ex2
+        pv_premiums_list[idx] = run_pre
+
+        # BEL + PAD = PV Benefits + PV Surrender + PV Expenses 2 - PV Premiums
+        val_bel_pad = run_ben + run_sur + run_ex2 - run_pre
+        bel_pad_list[idx] = val_bel_pad
+
+        # --- AMBIL NILAI BEL MASTER DI SINI ---
+        if bel_master is not None:
+            if hasattr(bel_master, 'iloc'):
+                val_bel_master = float(bel_master.iloc[idx])
+            else:
+                val_bel_master = float(bel_master[idx])
+        else:
+            val_bel_master = val_bel_pad  # Fallback jika bel_master kosong
+
+        # RA = (BEL + PAD) - BEL Master
+        val_ra = val_bel_pad - val_bel_master
+        ra_list[idx] = val_ra
+
+        # RA Per Unit = RA / Survive Beginning
+        surv_beg = survive_beg_list[idx] if idx < len(survive_beg_list) else 1.0
+        val_ra_unit = (val_ra / surv_beg) if surv_beg != 0 else 0.0
+        ra_per_unit_list[idx] = val_ra_unit
 
     pv_death_benefit_list = [0.0] * len(df)
     after_pv_death_list = [0.0] * len(df)
@@ -1573,11 +1660,24 @@ def generate_racsm_projection(
         "% Premi (After)": after_pct_premi_list,
         "Fixed Cost (After)": after_fixed_cost_list,
         "Total Future Expenses 1": total_future_expenses_1_list,
-        "Total Future Expenses": total_future_expenses_list,
-        "Future Premiums": future_premiums_list
+        "Total Future Expenses 2": total_future_expenses_list,
+        "Future Premiums": future_premiums_list,
+        # PV FUTURE
+        "PV Future Benefits (Claim)": pv_benefits_list,
+        "PV Surrender (Refund)": pv_surrender_list,
+        "PV Future Komisi": pv_komisi_list,
+        "PV Future Biaya Akuisisi (Other Expense)": pv_akuisisi_list,
+        "PV Future % Premi": pv_pct_premi_list,
+        "PV Future Fixed Cost": pv_fixed_cost_list,
+        "PV Future Expenses 1": pv_exp_1_list,
+        "PV Future Expenses 2": pv_exp_2_list,
+        "PV Future Premiums": pv_premiums_list,
+        "BEL+PAD": bel_pad_list,
+        "RA": ra_list,
+        "RA Per Unit": ra_per_unit_list
     })
     
     # Perbaikan mapping kolom PA agar akurat menggunakan list
-    projection_racsm["PA"] = pa_list
+    # projection_racsm["PA"] = pa_list
     
     return projection_racsm
