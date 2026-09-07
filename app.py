@@ -12,7 +12,7 @@ st.set_page_config(
 )
 
 st.title("📊 PSAK 117 Actuarial Valuation Engine (GMM)")
-st.caption("Aplikasi Perhitungan Best Estimate Liability, Risk Adjustment, dan CSM menggunakan Streamlit & Python")
+# st.caption("Aplikasi Perhitungan Best Estimate Liability, Risk Adjustment, dan CSM menggunakan Streamlit & Python")
 
 # 2. Sidebar untuk Unggah Berkas
 st.sidebar.header("Unduh & Unggah Data")
