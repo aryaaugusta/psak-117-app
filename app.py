@@ -271,10 +271,10 @@ if uploaded_file is not None:
         # --- TAB RA & CSM ---
         with tab_ra_csm:
             # st.subheader("Valuasi Saldo Awal Pemenuhan Kewajiban Kontrak (Insepsi)")
-            m1, m2, m3 = st.columns(3)
-            m1.metric("BEL (Best Estimate Liability)", format_idr(summary_metrics["Total_BEL"]))
-            m2.metric("RA (Risk Adjustment)", format_idr(summary_metrics["Total_RA"]))
-            m3.metric("CSM (Contractual Service Margin)", format_idr(summary_metrics["Total_CSM"]))
+            # m1, m2, m3 = st.columns(3)
+            # m1.metric("BEL (Best Estimate Liability)", format_idr(summary_metrics["Total_BEL"]))
+            # m2.metric("RA (Risk Adjustment)", format_idr(summary_metrics["Total_RA"]))
+            # m3.metric("CSM (Contractual Service Margin)", format_idr(summary_metrics["Total_CSM"]))
             
             # if summary_metrics["Is_Onerous"]:
             #     st.error("⚠️ Portofolio Kontrak berstatus Onerous (Rugi). Saldo awal CSM diatur menjadi Rp 0,00 dan rugi langsung diakui di P&L.")
@@ -353,6 +353,17 @@ if uploaded_file is not None:
                 asumsi_lapse_monthly=data_bundle["asumsi_lapse_m2"],
                 bel_master=df_proyeksi["BEL"]
             )
+
+            # --- AMBIL NILAI SALDO AWAL (BARIS PERTAMA / BULAN KE-1) DARI DFRACSM ---
+            initial_bel = df_racsm["BEL+PAD"].iloc[0] if not df_racsm.empty else 0.0
+            initial_ra = df_racsm["RA Beginning"].iloc[0] if not df_racsm.empty else 0.0
+            initial_csm = df_racsm["CSM Beginning"].iloc[0] if not df_racsm.empty else 0.0
+
+            m1, m2, m3 = st.columns(3)
+            m1.metric("BEL (Best Estimate Liability)", format_idr(initial_bel))
+            m2.metric("RA (Risk Adjustment)", format_idr(initial_ra))
+            m3.metric("CSM (Contractual Service Margin)", format_idr(initial_csm))
+
             # Menampilkan tabel
             df_racsm.index += 1
             df_proyeksi_styled = highlight_lapse_column_racsm(df_racsm)

@@ -36,8 +36,10 @@ def format_date_columns(df):
 
 def format_idr(val):
     """
-    Mengubah float/int menjadi format string Rupiah yang rapi
+    Mengubah float/int menjadi format string Rupiah dengan pemisah ribuan titik (.) tanpa desimal
     """
     if isinstance(val, (int, float)):
-        return f"Rp {val:,.2f}"
+        # Format ribuan dengan koma lalu tukar koma menjadi titik
+        formatted_num = f"{val:,.0f}".replace(",", ".")
+        return f"Rp {formatted_num}"
     return val
