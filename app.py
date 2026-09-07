@@ -298,7 +298,8 @@ if uploaded_file is not None:
                                       "PV Future Benefits (Claim)","PV Surrender (Refund)", "PV Future Komisi", "PV Future Biaya Akuisisi (Other Expense)", "PV Future % Premi", 
                                       "PV Future Fixed Cost", "PV Future Expenses 1", "PV Future Expenses 2", "PV Future Premiums",
                                       "BEL", "BEL Per Unit", "BEL Beginning", "BEL Premium", "BEL Commission", "BEL Expense", "BEL Other Expense", "BEL Claim", 
-                                      "BEL Surrender", "Unwind", "Inc (Dec) of BEL", "BEL Ending", "Selisih", "BEL+PAD", "RA", "RA Per Unit"]
+                                      "BEL Surrender", "Unwind", "Inc (Dec) of BEL", "BEL Ending", "Selisih", "BEL+PAD", "RA", "RA Per Unit",
+                                      "RA Beginning", "RA Interest Accrete", "RA Release", "RA Ending", "CSM Beginning", "CSM Unwind", "CSM Released", "CSM Ending"]
 
                 # Kolom berformat 0 atau 1 (seperti Mature)
                 cols_to_format_zero_one = ['Monthly qx (Mature)']
@@ -306,6 +307,9 @@ if uploaded_file is not None:
                 # Kolom berformat 6 desimal (Rate & Decrement)
                 cols_to_format_decimal = ['Survive beginning', 'Term Life', 'Lapse', 'Mature', 'Survive ending', 'ND', 
                                           'Term Life Joint', 'ND Joint', 'PA', 'CI', 'TPD', 'CP',]
+
+                # Kolom berformat 0 atau 1 (seperti Mature)
+                cols_to_format_percentage = ["%RA Release","% CSM Release"]
 
                 # Fungsi kustom untuk format angka ribuan dengan titik (.) ala Indonesia
                 def format_idr_thousand(val):
@@ -330,6 +334,8 @@ if uploaded_file is not None:
                     "{:.0f}", subset=[c for c in cols_to_format_zero_one if c in df.columns]
                 ).format(
                     "{:.6f}", subset=[c for c in cols_to_format_decimal if c in df.columns]
+                ).format(
+                    "{:.2%}", subset=[c for c in cols_to_format_percentage if c in df.columns]
                 )
                 
                 return styler            

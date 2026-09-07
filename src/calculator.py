@@ -1583,6 +1583,74 @@ def generate_racsm_projection(
         val_ra_unit = (val_ra / surv_beg) if surv_beg != 0 else 0.0
         ra_per_unit_list[idx] = val_ra_unit
 
+    # ==========================================
+    # RA MOVEMENT & CSM ROLL-FORWARD
+    # ==========================================
+    ra_beginning_list = []
+    ra_interest_accrete_list = []
+    pct_ra_release_list = []
+    ra_release_list = []
+    ra_ending_list = []
+
+    csm_beginning_list = []
+    csm_unwind_list = []
+    pct_csm_release_list = []
+    csm_released_list = []
+    csm_ending_list = []
+
+    prev_ra_ending = 0.0
+    prev_csm_ending = 0.0
+
+    # Ambil data P_Release dari detail/header jika ada (misal dalam bentuk desimal atau persen)
+    p_release_base = df['P_Release'] if 'P_Release' in df.columns else pd.Series([0.0]*n_rows)
+
+    for idx in range(n_rows):
+        # --- 1. RA MOVEMENT ---
+        if idx == 0:
+            # Baris pertama: MAX(RA Per Unit) dari seluruh baris ra_per_unit_list
+            ra_beg = max(ra_per_unit_list) if ra_per_unit_list else 0.0
+        else:
+            ra_beg = prev_ra_ending
+
+        ra_acc = ra_beg * discount_rate_monthly
+        
+        # %RA Release (dijaga dalam bentuk desimal/persen untuk tampilan)
+        pct_rel = float(p_release_base.iloc[idx]) if hasattr(p_release_base, 'iloc') else float(p_release_base)
+        
+        # RA Release (Nilai nominal biasa)
+        ra_rel = -(ra_beg + ra_acc) * pct_rel
+        
+        # RA Ending
+        ra_end = ra_beg + ra_acc + ra_rel
+        prev_ra_ending = ra_end
+
+        ra_beginning_list.append(ra_beg)
+        ra_interest_accrete_list.append(ra_acc)
+        pct_ra_release_list.append(pct_rel)
+        ra_release_list.append(ra_rel)
+        ra_ending_list.append(ra_end)
+
+        # --- 2. CSM ---
+        # Ambil BEL Beginning dari list atau kolom BEL Beginning jika sudah dihitung sebelumnya
+        bel_beg_val = bel_pad_list[idx] # atau dari kolom BEL Beginning master
+        
+        if idx == 0:
+            csm_beg = max(0.0, -bel_beg_val - ra_beg)
+        else:
+            csm_beg = prev_csm_ending
+
+        csm_unw = csm_beg * discount_rate_monthly
+        pct_csm_rel = pct_rel # Sama seperti %RA Release
+        csm_rel = -(csm_beg + csm_unw) * pct_csm_rel
+        csm_end = csm_beg + csm_unw + csm_rel
+        prev_csm_ending = csm_end
+
+        csm_beginning_list.append(csm_beg)
+        csm_unwind_list.append(csm_unw)
+        pct_csm_release_list.append(pct_csm_rel)
+        csm_released_list.append(csm_rel)
+        csm_ending_list.append(csm_end)
+
     pv_death_benefit_list = [0.0] * len(df)
     after_pv_death_list = [0.0] * len(df)
 
@@ -1674,7 +1742,18 @@ def generate_racsm_projection(
         "PV Future Premiums": pv_premiums_list,
         "BEL+PAD": bel_pad_list,
         "RA": ra_list,
-        "RA Per Unit": ra_per_unit_list
+        "RA Per Unit": ra_per_unit_list,
+        # RA Movement & CSM Roll-Forward
+        "RA Beginning": ra_beginning_list,
+        "RA Interest Accrete": ra_interest_accrete_list,
+        "%RA Release": pct_ra_release_list,
+        "RA Release": ra_release_list,
+        "RA Ending": ra_ending_list,
+        "CSM Beginning": csm_beginning_list,
+        "CSM Unwind": csm_unwind_list,
+        "% CSM Release": pct_csm_release_list,
+        "CSM Released": csm_released_list,
+        "CSM Ending": csm_ending_list
     })
     
     # Perbaikan mapping kolom PA agar akurat menggunakan list
