@@ -178,12 +178,12 @@ if uploaded_file is not None:
         df_bel_result = calculate_bel(df_gmm, data_bundle["asumsi_ibpa"]) 
         total_bel_val = df_bel_result["PV_Net_Cash_Flow"].sum()
         
-        summary_metrics = calculate_ra_csm(df_header, total_bel_val, data_bundle["asumsi_ibpa"])
-        df_movement_result = generate_movement(
-            summary_metrics["Total_CSM"], 
-            summary_metrics["Total_RA"], 
-            summary_metrics["Total_BEL"]
-        )
+        # summary_metrics = calculate_ra_csm(df_header, total_bel_val, data_bundle["asumsi_ibpa"])
+        # df_movement_result = generate_movement(
+        #     summary_metrics["Total_CSM"], 
+        #     summary_metrics["Total_RA"], 
+        #     summary_metrics["Total_BEL"]
+        # )
                 
         # --- TAB BEL ---
         with tab_bel:
@@ -271,15 +271,7 @@ if uploaded_file is not None:
         # --- TAB RA & CSM ---
         with tab_ra_csm:
             # st.subheader("Valuasi Saldo Awal Pemenuhan Kewajiban Kontrak (Insepsi)")
-            # m1, m2, m3 = st.columns(3)
-            # m1.metric("BEL (Best Estimate Liability)", format_idr(summary_metrics["Total_BEL"]))
-            # m2.metric("RA (Risk Adjustment)", format_idr(summary_metrics["Total_RA"]))
-            # m3.metric("CSM (Contractual Service Margin)", format_idr(summary_metrics["Total_CSM"]))
-            
-            # if summary_metrics["Is_Onerous"]:
-            #     st.error("⚠️ Portofolio Kontrak berstatus Onerous (Rugi). Saldo awal CSM diatur menjadi Rp 0,00 dan rugi langsung diakui di P&L.")
-            # else:
-            #     st.success("✨ Portofolio Kontrak Profitable. Keuntungan ditangguhkan ke dalam saldo CSM awal.")
+            st.subheader("Valuasi Saldo Awal")
 
             def highlight_lapse_column_racsm(df):
                 """
@@ -354,10 +346,20 @@ if uploaded_file is not None:
                 bel_master=df_proyeksi["BEL"]
             )
 
-            # --- AMBIL NILAI SALDO AWAL (BARIS PERTAMA / BULAN KE-1) DARI DFRACSM ---
+            # Ambil nilai saldo awal (bulan ke-1) dari df_racsm
             initial_bel = df_racsm["BEL+PAD"].iloc[0] if not df_racsm.empty else 0.0
             initial_ra = df_racsm["RA Beginning"].iloc[0] if not df_racsm.empty else 0.0
             initial_csm = df_racsm["CSM Beginning"].iloc[0] if not df_racsm.empty else 0.0
+
+            # --- LOGIKA PENGECEKAN ONEROOUS YANG DISESUAIKAN ---
+            # Kontrak disebut onerous jika nilai awal sebelum dibatasi 0 bernilai negatif
+            raw_initial_csm = -initial_bel - initial_ra
+            is_onerous = raw_initial_csm < 0
+
+            if is_onerous:
+                st.error("⚠️ Portofolio Kontrak berstatus Onerous (Rugi). Saldo awal CSM diatur menjadi Rp 0,00 dan rugi langsung diakui di P&L.")
+            else:
+                st.success("✨ Portofolio Kontrak Profitable. Keuntungan ditangguhkan ke dalam saldo CSM awal.")
 
             m1, m2, m3 = st.columns(3)
             m1.metric("BEL (Best Estimate Liability)", format_idr(initial_bel))
@@ -372,6 +374,17 @@ if uploaded_file is not None:
         # --- TAB MOVEMENT ---
         with tab_movement:
             st.subheader("Tabel Pergerakan Saldo PSAK 117 (GMM Roll-Forward)")
+
+            # Ambil total nilai dari df_racsm yang sudah dikalkulasi
+            total_bel_val = df_racsm["BEL+PAD"].iloc[0] if not df_racsm.empty else 0.0
+            total_ra_val = df_racsm["RA Beginning"].iloc[0] if not df_racsm.empty else 0.0
+            total_csm_val = df_racsm["CSM Beginning"].iloc[0] if not df_racsm.empty else 0.0
+
+            df_movement_result = generate_movement(
+                total_csm_val, 
+                total_ra_val, 
+                total_bel_val
+            )
             
             # Memformat angka pada dataframe movement agar memunculkan satuan IDR yang rapi
             df_move_formatted = df_movement_result.copy()
