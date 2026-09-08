@@ -1,6 +1,7 @@
 import streamlit as st
+import io
 from src.data_loader import load_psak117_data
-from src.calculator import calculate_bel, calculate_ra_csm, generate_movement, generate_racsm_projection, get_discount_rate_ibpa, generate_bel_projection
+from src.calculator import calculate_bel, generate_movement, generate_racsm_projection, get_discount_rate_ibpa, generate_bel_projection
 from src.utils import format_idr, format_date_columns
 import pandas as pd
 
@@ -176,7 +177,7 @@ if uploaded_file is not None:
                 
         # Hitung menggunakan tabel Rate IBPA spesifik
         df_bel_result = calculate_bel(df_gmm, data_bundle["asumsi_ibpa"]) 
-        total_bel_val = df_bel_result["PV_Net_Cash_Flow"].sum()
+        # total_bel_val = df_bel_result["PV_Net_Cash_Flow"].sum()
         
         # summary_metrics = calculate_ra_csm(df_header, total_bel_val, data_bundle["asumsi_ibpa"])
         # df_movement_result = generate_movement(
@@ -373,7 +374,7 @@ if uploaded_file is not None:
                 
         # --- TAB MOVEMENT ---
         with tab_movement:
-            st.subheader("Tabel Pergerakan Saldo PSAK 117 (GMM Roll-Forward)")
+            st.subheader("Tabel Pergerakan Saldo PSAK 117 (GMM)")
 
             # Ambil total nilai dari df_racsm yang sudah dikalkulasi
             total_bel_val = df_racsm["BEL+PAD"].iloc[0] if not df_racsm.empty else 0.0
@@ -385,23 +386,44 @@ if uploaded_file is not None:
                 total_ra_val, 
                 total_bel_val
             )
-            
-            # Memformat angka pada dataframe movement agar memunculkan satuan IDR yang rapi
-            df_move_formatted = df_movement_result.copy()
+
+            # Siapkan data mentah yang sudah dibulatkan untuk file Excel
+            df_export = df_movement_result.copy()
             for col in ["BEL (IDR)", "Risk Adjustment (IDR)", "CSM (IDR)"]:
-                df_move_formatted[col] = df_move_formatted[col].apply(format_idr)
-                
-            st.table(df_move_formatted)
+                df_export[col] = df_export[col].round(0)
+
+            # Buat buffer memori virtual untuk menyimpan file Excel
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                df_export.to_excel(writer, index=False, sheet_name='Liability Movement')
             
-            # Tombol unduh untuk keperluan laporan aktuaria lanjutan
+            excel_data = output.getvalue()
+
             st.sidebar.markdown("---")
             st.sidebar.subheader("Ekspor Hasil Perhitungan")
             st.sidebar.download_button(
-                label="📥 Unduh Data Pergerakan (CSV)",
-                data=df_movement_result.to_csv(index=False),
-                file_name="PSAK117_GMM_Movement_Output.csv",
-                mime="text/csv"
+                label="📥 Unduh Data Pergerakan (Excel)",
+                data=excel_data,
+                file_name="PSAK117_GMM_Movement_Output.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
+            
+            # # Memformat angka pada dataframe movement agar memunculkan satuan IDR yang rapi
+            # df_move_formatted = df_movement_result.copy()
+            # for col in ["BEL (IDR)", "Risk Adjustment (IDR)", "CSM (IDR)"]:
+            #     df_move_formatted[col] = df_move_formatted[col].apply(format_idr)
+                
+            # st.table(df_move_formatted)
+            
+            # # Tombol unduh untuk keperluan laporan aktuaria lanjutan
+            # st.sidebar.markdown("---")
+            # st.sidebar.subheader("Ekspor Hasil Perhitungan")
+            # st.sidebar.download_button(
+            #     label="📥 Unduh Data Pergerakan (CSV)",
+            #     data=df_movement_result.to_csv(index=False),
+            #     file_name="PSAK117_GMM_Movement_Output.csv",
+            #     mime="text/csv"
+            # )
 
 else:
     st.info("💡 Silakan unggah file template Excel kalkulasi aktuaria Anda pada panel sebelah kiri untuk memulai pemisahan tabel dan kalkulasi.")

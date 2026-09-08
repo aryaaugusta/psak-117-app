@@ -72,40 +72,40 @@ def calculate_bel(df_detail, df_asumsi_ibpa):
     
     return df_bel
 
-def calculate_ra_csm(df_header, total_bel, df_asumsi_ibpa):
-    """
-    Menghitung Risk Adjustment (RA) dan Contractual Service Margin (CSM) pada masa awal (Insepsi).
-    """
-    # Secara default menggunakan 5% dari BEL jika tidak ada margin risiko spesifik di asumsi
-    ra_percentage = 0.05 
+# def calculate_ra_csm(df_header, total_bel, df_asumsi_ibpa):
+#     """
+#     Menghitung Risk Adjustment (RA) dan Contractual Service Margin (CSM) pada masa awal (Insepsi).
+#     """
+#     # Secara default menggunakan 5% dari BEL jika tidak ada margin risiko spesifik di asumsi
+#     ra_percentage = 0.05 
     
-    # Cari nilai total premi di tabel Header untuk dasar perbandingan (jika diperlukan)
-    premium_col = next((c for c in df_header.columns if "premium" in str(c).lower() or "premi" in str(c).lower()), None)
-    if premium_col:
-        total_premium = pd.to_numeric(df_header[premium_col], errors="coerce").sum()
-    else:
-        total_premium = 0
+#     # Cari nilai total premi di tabel Header untuk dasar perbandingan (jika diperlukan)
+#     premium_col = next((c for c in df_header.columns if "premium" in str(c).lower() or "premi" in str(c).lower()), None)
+#     if premium_col:
+#         total_premium = pd.to_numeric(df_header[premium_col], errors="coerce").sum()
+#     else:
+#         total_premium = 0
     
-    # Perhitungan Risk Adjustment
-    total_ra = total_bel * ra_percentage
+#     # Perhitungan Risk Adjustment
+#     total_ra = total_bel * ra_percentage
     
-    # Perhitungan CSM (Asumsi dasar: Sisa PV Net Cash Flow yang profit dikurangi RA)
-    # Jika hasilnya negatif, kontrak dianggap Onerous (Rugi) dan CSM menjadi 0.
-    net_fulfillment_cf = total_bel - total_ra
+#     # Perhitungan CSM (Asumsi dasar: Sisa PV Net Cash Flow yang profit dikurangi RA)
+#     # Jika hasilnya negatif, kontrak dianggap Onerous (Rugi) dan CSM menjadi 0.
+#     net_fulfillment_cf = total_bel - total_ra
     
-    if net_fulfillment_cf > 0:
-        total_csm = net_fulfillment_cf
-        is_onerous = False
-    else:
-        total_csm = 0
-        is_onerous = True
+#     if net_fulfillment_cf > 0:
+#         total_csm = net_fulfillment_cf
+#         is_onerous = False
+#     else:
+#         total_csm = 0
+#         is_onerous = True
         
-    return {
-        "Total_BEL": total_bel,
-        "Total_RA": total_ra,
-        "Total_CSM": total_csm,
-        "Is_Onerous": is_onerous
-    }
+#     return {
+#         "Total_BEL": total_bel,
+#         "Total_RA": total_ra,
+#         "Total_CSM": total_csm,
+#         "Is_Onerous": is_onerous
+#     }
 
 def generate_movement(initial_csm, initial_ra, initial_bel):
     """
