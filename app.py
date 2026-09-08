@@ -177,7 +177,7 @@ if uploaded_file is not None:
                 
         # Hitung menggunakan tabel Rate IBPA spesifik
         df_bel_result = calculate_bel(df_gmm, data_bundle["asumsi_ibpa"]) 
-        # total_bel_val = df_bel_result["PV_Net_Cash_Flow"].sum()
+        total_bel_val = df_bel_result["PV_Net_Cash_Flow"].sum()
         
         # summary_metrics = calculate_ra_csm(df_header, total_bel_val, data_bundle["asumsi_ibpa"])
         # df_movement_result = generate_movement(
@@ -244,7 +244,7 @@ if uploaded_file is not None:
 
             # df_bel_projection_styled = highlight_lapse_column(df_bel_result)
             st.subheader("Perhitungan Proyeksi Best Estimate Liability (BEL) - Mata Uang IDR")
-            # st.metric("Total BEL Terdiskonto (Global)", format_idr(total_bel_val))
+            st.metric("Total BEL Terdiskonto (Global)", format_idr(total_bel_val))
             st.dataframe(df_bel_result, use_container_width=True)
 
             # st.subheader("📋 Proyeksi Arus Kas Bulanan (Cash Flow)")
@@ -390,12 +390,25 @@ if uploaded_file is not None:
             # Siapkan data mentah yang sudah dibulatkan untuk file Excel
             df_export = df_movement_result.copy()
             for col in ["BEL (IDR)", "Risk Adjustment (IDR)", "CSM (IDR)"]:
-                df_export[col] = df_export[col].round(0)
+                df_export[col] = df_export[col].apply(format_idr)
+
+            st.table(df_export)
 
             # Buat buffer memori virtual untuk menyimpan file Excel
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                 df_export.to_excel(writer, index=False, sheet_name='Liability Movement')
+
+                # Mengatur otomatis lebar kolom agar pas dan rapi sesuai isi teks
+                worksheet = writer.sheets['Liability Movement']
+                for i, col in enumerate(df_export.columns):
+                    # Hitung panjang maksimum teks pada kolom tersebut
+                    max_len = max(
+                        df_export[col].astype(str).map(len).max(),
+                        len(str(col))
+                    )
+                    # Tambahkan sedikit ruang ekstra agar tidak terlalu mepet
+                    worksheet.set_column(i, i, max_len + 4)
             
             excel_data = output.getvalue()
 
@@ -407,23 +420,6 @@ if uploaded_file is not None:
                 file_name="PSAK117_GMM_Movement_Output.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
-            
-            # # Memformat angka pada dataframe movement agar memunculkan satuan IDR yang rapi
-            # df_move_formatted = df_movement_result.copy()
-            # for col in ["BEL (IDR)", "Risk Adjustment (IDR)", "CSM (IDR)"]:
-            #     df_move_formatted[col] = df_move_formatted[col].apply(format_idr)
-                
-            # st.table(df_move_formatted)
-            
-            # # Tombol unduh untuk keperluan laporan aktuaria lanjutan
-            # st.sidebar.markdown("---")
-            # st.sidebar.subheader("Ekspor Hasil Perhitungan")
-            # st.sidebar.download_button(
-            #     label="📥 Unduh Data Pergerakan (CSV)",
-            #     data=df_movement_result.to_csv(index=False),
-            #     file_name="PSAK117_GMM_Movement_Output.csv",
-            #     mime="text/csv"
-            # )
 
 else:
     st.info("💡 Silakan unggah file template Excel kalkulasi aktuaria Anda pada panel sebelah kiri untuk memulai pemisahan tabel dan kalkulasi.")
