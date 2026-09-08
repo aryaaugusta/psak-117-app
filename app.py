@@ -64,7 +64,7 @@ if uploaded_file is not None:
         discount_rate_year = get_discount_rate_ibpa(first_row, data_bundle["asumsi_ibpa"])
         discount_rate_monthly = (1 + discount_rate_year) ** (1 / 12) - 1
         # print(f"FIRST ROW: {first_row}")
-        print(f"DISCOUNT RATE YEAR: {discount_rate_year}")
+        # print(f"DISCOUNT RATE YEAR: {discount_rate_year}")
         # print(f"DISCOUNT RATE PER MONTH: {discount_rate_monthly}")
 
         # 2. Perhitungan Suku Bunga Bonus (80% dari discount rate)
@@ -244,11 +244,9 @@ if uploaded_file is not None:
 
             # df_bel_projection_styled = highlight_lapse_column(df_bel_result)
             st.subheader("Perhitungan Proyeksi Best Estimate Liability (BEL) - Mata Uang IDR")
-            st.metric("Total BEL Terdiskonto (Global)", format_idr(total_bel_val))
-            st.dataframe(df_bel_result, use_container_width=True)
-
+            
             # st.subheader("📋 Proyeksi Arus Kas Bulanan (Cash Flow)")
-            st.markdown("---")
+            
 
             df_proyeksi = generate_bel_projection(
                 df_header=df_header,
@@ -264,6 +262,12 @@ if uploaded_file is not None:
                 discount_rate_monthly=discount_rate_monthly
             )
 
+            # Ambil nilai BEL awal (bulan ke-1) dari df_proyeksi
+            initial_bel_val = df_proyeksi["BEL"].iloc[0] if not df_proyeksi.empty else 0.0
+            
+            st.metric("Total BEL Terdiskonto", format_idr(initial_bel_val))
+            st.dataframe(df_bel_result, use_container_width=True)
+            st.markdown("---")
             # Menampilkan tabel
             df_proyeksi.index += 1
             df_proyeksi_styled = highlight_lapse_column(df_proyeksi)

@@ -1546,7 +1546,7 @@ def generate_racsm_projection(
             run_kom = curr_kom + (run_kom / rate_divisor)
             run_aku = curr_aku + (run_aku / rate_divisor)
             run_pct = curr_pct + (run_pct / rate_divisor)
-            run_fix = curr_fix + (run_fix / rate_divisor)
+            run_fix = curr_fix + run_fix / (rate_divisor)
             run_ex1 = curr_ex1 + (run_ex1 / rate_divisor)
             run_ex2 = curr_ex2 + (run_ex2 / rate_divisor)
             run_pre = curr_pre + (run_pre / rate_divisor)
