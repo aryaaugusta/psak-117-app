@@ -3,3 +3,4 @@ pandas
 numpy
 openpyxl
 plotly
+XlsxWriter>=3.0.0

@@ -371,7 +371,7 @@ if uploaded_file is not None:
             df_racsm.index += 1
             df_proyeksi_styled = highlight_lapse_column_racsm(df_racsm)
             st.dataframe(df_proyeksi_styled, use_container_width=True)
-                
+
         # --- TAB MOVEMENT ---
         with tab_movement:
             st.subheader("Tabel Pergerakan Saldo PSAK 117 (GMM)")
