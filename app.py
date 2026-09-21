@@ -244,9 +244,6 @@ if uploaded_file is not None:
 
             # df_bel_projection_styled = highlight_lapse_column(df_bel_result)
             st.subheader("Perhitungan Proyeksi Best Estimate Liability (BEL) - Mata Uang IDR")
-            
-            # st.subheader("📋 Proyeksi Arus Kas Bulanan (Cash Flow)")
-            
 
             df_proyeksi = generate_bel_projection(
                 df_header=df_header,

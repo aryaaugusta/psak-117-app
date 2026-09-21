@@ -1190,7 +1190,7 @@ def generate_racsm_projection(
     df_header, df_detail, 
     pad_expense_racsm=0.0,        # PAD Expense khusus RA CSM
     monthly_inflation_racsm=0.0,  # Inflasi bulanan khusus RA CSM
-    asumsi_inflasi=None, df_tmi=None, pad_mortality_racsm=0.0, 
+    df_tmi=None, pad_mortality_racsm=0.0, 
     total_nd_global=0.0, total_joint_term_life_global=0.0, total_nd_joint_global=0.0,
     total_pa_global=0.0, total_ci_global=0.0, total_tpd_global=0.0, total_cp_global=0.0,
     asumsi_lapse_monthly=None, bonus_rate_monthly=0.0, discount_rate_monthly=0.0, pad_lapse_racsm=0.0,
@@ -1755,8 +1755,5 @@ def generate_racsm_projection(
         "CSM Released": csm_released_list,
         "CSM Ending": csm_ending_list
     })
-    
-    # Perbaikan mapping kolom PA agar akurat menggunakan list
-    # projection_racsm["PA"] = pa_list
     
     return projection_racsm
