@@ -4,6 +4,7 @@ from src.data_loader import load_psak117_data
 from src.calculator import calculate_bel, generate_movement, generate_racsm_projection, get_discount_rate_ibpa, generate_bel_projection
 from src.utils import format_idr, format_date_columns
 import pandas as pd
+import openpyxl
 
 # 1. Konfigurasi Halaman Streamlit
 st.set_page_config(
@@ -339,7 +340,7 @@ if uploaded_file is not None:
                 df_detail=df_detail,
                 pad_expense_racsm=pad_expense_racsm,
                 monthly_inflation_racsm=monthly_inflation_racsm,
-                asumsi_inflasi=data_bundle.get("asumsi_inflasi"),
+                # asumsi_inflasi=data_bundle.get("asumsi_inflasi"),
                 df_tmi=data_bundle.get("asumsi_tmi"),
                 discount_rate_monthly=discount_rate_monthly,
                 pad_lapse_racsm=pad_lapse_racsm,
@@ -389,38 +390,134 @@ if uploaded_file is not None:
             )
 
             # Siapkan data mentah yang sudah dibulatkan untuk file Excel
-            df_export = df_movement_result.copy()
-            for col in ["BEL (IDR)", "Risk Adjustment (IDR)", "CSM (IDR)"]:
-                df_export[col] = df_export[col].apply(format_idr)
+            # df_export = df_movement_result.copy()
+            # for col in ["BEL (IDR)", "Risk Adjustment (IDR)", "CSM (IDR)"]:
+            #     df_export[col] = df_export[col].apply(format_idr)
 
-            st.table(df_export)
+            # st.table(df_export)
 
-            # Buat buffer memori virtual untuk menyimpan file Excel
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                df_export.to_excel(writer, index=False, sheet_name='Liability Movement')
+            # ==========================================
+            # EKSPOR SEMUA LAPORAN KE SATU FILE EXCEL (MULTI-SHEET)
+            # ==========================================
 
-                # Mengatur otomatis lebar kolom agar pas dan rapi sesuai isi teks
-                worksheet = writer.sheets['Liability Movement']
-                for i, col in enumerate(df_export.columns):
-                    # Hitung panjang maksimum teks pada kolom tersebut
-                    max_len = max(
-                        df_export[col].astype(str).map(len).max(),
-                        len(str(col))
-                    )
-                    # Tambahkan sedikit ruang ekstra agar tidak terlalu mepet
-                    worksheet.set_column(i, i, max_len + 4)
+            # 1. Siapkan salinan data untuk masing-masing sheet
+            df_bel_export = df_proyeksi.copy()
+            df_racsm_export = df_racsm.copy()
+            df_movement_export = df_movement_result.copy()
             
-            excel_data = output.getvalue()
+            # Bulatkan nilai nominal pada tabel movement agar bersih
+            for col in ["BEL (IDR)", "Risk Adjustment (IDR)", "CSM (IDR)"]:
+                if col in df_movement_export.columns:
+                    df_movement_export[col] = df_movement_export[col].apply(format_idr)
 
+            st.table(df_movement_export)
+
+            # 2. Tulis ke dalam buffer memori menggunakan openpyxl
+            output_multisheet = io.BytesIO()
+            with pd.ExcelWriter(output_multisheet, engine='openpyxl') as writer:
+
+                # Helper function untuk auto-fit kolom DAN pemformatan angka sel
+                def format_and_fit_sheet(df, sheet_name):
+                    # Tulis dataframe ke sheet terlebih dahulu
+                    has_index = (sheet_name != 'Liability Movement')
+                    df.to_excel(writer, index=has_index, sheet_name=sheet_name)
+                    
+                    worksheet = writer.sheets[sheet_name]
+                    
+                    # Tentukan baris awal data (karena ada header di baris 1)
+                    start_row = 2
+                    # start_col = 1 if sheet_name != 'Liability Movement' else 1
+                    
+                    # Iterasi kolom
+                    for col_idx, col_name in enumerate(df.columns, start=1):
+                        col_letter = openpyxl.utils.get_column_letter(col_idx + (1 if has_index else 0))
+                        max_len = len(str(col_name))
+                        
+                        # Cek nama kolom secara spesifik untuk menghindari salah format
+                        col_lower = str(col_name).lower()
+                        
+                        # Kolom yang BENAR-BENAR persentase (Rate / P_Release / %RA)
+                        is_percentage = (
+                            ('%' in col_lower or 'rate' in col_lower or 'release' in col_lower) 
+                            and 'biaya' not in col_lower 
+                            and 'acquisition' not in col_lower
+                            and 'premi' not in col_lower
+                        )
+
+                        # Deteksi kolom rate/qx desimal kecil (seperti qx, discount rate, dll)
+                        is_decimal_rate = (
+                            'rate' in col_lower 
+                            or 'qx' in col_lower 
+                            or 'cv' in col_lower 
+                            or 'inflation' in col_lower
+                            or 'survive' in col_lower
+                            or 'term life' in col_lower
+                            or 'lapse' in col_lower
+                            or 'mature' in col_lower
+                        )
+                        
+                        for row_idx in range(start_row, start_row + len(df)):
+                            cell = worksheet.cell(row=row_idx, column=col_idx + (1 if has_index else 0))
+                            val = cell.value
+                            
+                            if val is not None and isinstance(val, (int, float)):
+                                if is_percentage and abs(val) <= 1.0:
+                                    cell.number_format = '0.00%'
+                                elif is_decimal_rate and abs(val) < 1.0:
+                                    # Format rate dengan 6 angka di belakang koma (misal: 0.000837)
+                                    cell.number_format = '0.000000'
+                                else:
+                                    # Format nominal uang / bilangan bulat standar
+                                    cell.number_format = '#,##0'
+                                    
+                                max_len = max(max_len, len(str(cell.value)))
+                                
+                        # Atur lebar kolom agar otomatis rapi
+                        worksheet.column_dimensions[col_letter].width = max(max_len + 4, 12)
+
+                # Terapkan ke masing-masing sheet
+                format_and_fit_sheet(df_bel_export, 'Proyeksi BEL')
+                format_and_fit_sheet(df_racsm_export, 'Saldo RA & CSM')
+                format_and_fit_sheet(df_movement_export, 'Liability Movement')
+            
+            multisheet_data = output_multisheet.getvalue()
+
+            # 3. Tampilkan tombol unduh di sidebar atau bagian utama
             st.sidebar.markdown("---")
-            st.sidebar.subheader("Ekspor Hasil Perhitungan")
+            st.sidebar.subheader("Ekspor Laporan Lengkap")
             st.sidebar.download_button(
-                label="📥 Unduh Data Pergerakan (Excel)",
-                data=excel_data,
-                file_name="PSAK117_GMM_Movement_Output.xlsx",
+                label="📥 Unduh Semua Laporan (Excel)",
+                data=multisheet_data,
+                file_name="Hasil_Kalkulasi_PSAK-117.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
+
+            # Buat buffer memori virtual untuk menyimpan file Excel
+            # output = io.BytesIO()
+            # with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            #     df_export.to_excel(writer, index=False, sheet_name='Liability Movement')
+
+            #     # Mengatur otomatis lebar kolom agar pas dan rapi sesuai isi teks
+            #     worksheet = writer.sheets['Liability Movement']
+            #     for i, col in enumerate(df_export.columns):
+            #         # Hitung panjang maksimum teks pada kolom tersebut
+            #         max_len = max(
+            #             df_export[col].astype(str).map(len).max(),
+            #             len(str(col))
+            #         )
+            #         # Tambahkan sedikit ruang ekstra agar tidak terlalu mepet
+            #         worksheet.set_column(i, i, max_len + 4)
+            
+            # excel_data = output.getvalue()
+
+            # st.sidebar.markdown("---")
+            # st.sidebar.subheader("Ekspor Hasil Perhitungan")
+            # st.sidebar.download_button(
+            #     label="📥 Unduh Data Pergerakan (Excel)",
+            #     data=excel_data,
+            #     file_name="PSAK117_GMM_Movement_Output.xlsx",
+            #     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            # )
 
 else:
     st.info("💡 Silakan unggah file template Excel kalkulasi aktuaria Anda pada panel sebelah kiri untuk memulai pemisahan tabel dan kalkulasi.")
